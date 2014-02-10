@@ -1,0 +1,75 @@
+       IDENTIFICATION DIVISION.
+
+       PROGRAM-ID.  CBL08SUB.
+       AUTHOR.  CHRIS GLOCK.
+       DATE-WRITTEN.  11/10/06
+       DATE-COMPILED.
+      **************************************************
+      * PURPOSE:  THIS SUBPROGRAM WILL CALCULATE THE AGE
+      *           AND YEARS OF SERVICE FOR EACH EMPLOYEE
+      **************************************************
+
+       ENVIRONMENT DIVISION.
+       INPUT-OUTPUT SECTION.
+
+       FILE-CONTROL.
+
+       DATA DIVISION.
+       FILE SECTION.
+
+       WORKING-STORAGE SECTION.
+       01 WS-CURRENT-DATE.
+          05 WS-CURRENT-YEAR    PIC 9(4).
+          05 WS-CURRENT-MONTH   PIC 99.
+          05 WS-CURRENT-DAY     PIC 99.
+
+       01 WS-DATE-R REDEFINES WS-CURRENT-DATE PIC 9(8).
+
+       01 WS-CURRENT-MMDD          PIC 9(4).
+
+       01 WS-BIRTH-DATE.
+          05 WS-BIRTH-YEAR      PIC 9(4).
+          05 WS-BIRTH-MONTH     PIC 99.
+          05 WS-BIRTH-DAY       PIC 99.
+
+       01 WS-BIRTH-MMDD         PIC 9(4).
+
+       01 WS-CURDATE            PIC 9(8).
+       01 WS-DOH                PIC 9(8).
+
+       01 DAYS-OF-SERVICE       PIC 9(8).
+
+       LINKAGE SECTION.
+       01  DATE-OF-HIRE         PIC 9(8).
+       01  DATE-OF-BIRTH        PIC 9(8).
+       01  YEARS-OF-SERVICE     PIC 99.
+       01  EMP-AGE              PIC 99.
+
+       PROCEDURE DIVISION USING DATE-OF-HIRE
+                                DATE-OF-BIRTH
+                                YEARS-OF-SERVICE
+                                EMP-AGE.
+
+      *   DETERMINE EMPLOYEE AGE
+           MOVE FUNCTION CURRENT-DATE TO WS-CURRENT-DATE
+           MOVE WS-CURRENT-DATE(3:) TO WS-CURRENT-MMDD
+           MOVE DATE-OF-BIRTH TO WS-BIRTH-DATE
+           MOVE DATE-OF-BIRTH(3:) TO WS-BIRTH-MMDD
+
+           IF WS-BIRTH-MMDD > WS-CURRENT-MMDD
+             COMPUTE EMP-AGE = WS-CURRENT-YEAR - WS-BIRTH-YEAR - 1
+           ELSE
+      *      IF WS-BIRTH-DAY > WS-CURRENT-DAY
+      *         COMPUTE EMP-AGE = WS-CURRENT-YEAR - WS-BIRTH-YEAR - 1
+      *      ELSE
+             COMPUTE EMP-AGE = WS-CURRENT-YEAR - WS-BIRTH-YEAR
+      *      END-IF
+           END-IF
+      *   DETERMINE YEARS OF SERVICE
+           COMPUTE WS-DOH = FUNCTION INTEGER-OF-DATE(DATE-OF-HIRE)
+           COMPUTE WS-CURDATE = FUNCTION INTEGER-OF-DATE(WS-DATE-R)
+           COMPUTE DAYS-OF-SERVICE = WS-CURDATE - WS-DOH
+           COMPUTE YEARS-OF-SERVICE = DAYS-OF-SERVICE / 365
+
+           EXIT PROGRAM.
+

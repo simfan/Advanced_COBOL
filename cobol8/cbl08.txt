@@ -1,0 +1,597 @@
+       IDENTIFICATION DIVISION.
+
+       PROGRAM-ID. CBL08.
+       AUTHOR.  CHRIS GLOCK.
+       DATE-WRITTEN. 11/06/06.
+       DATE-COMPILED.
+      ******************************************************************
+      * PURPOSE:
+      *
+      *
+      ******************************************************************
+
+       ENVIRONMENT DIVISION.
+
+       INPUT-OUTPUT SECTION.
+
+       FILE-CONTROL.
+
+           SELECT SORT-FILE
+               ASSIGN TO SORTWK01.
+
+           SELECT RETIRE-FILE
+               ASSIGN TO RETIRE
+               ACCESS IS RANDOM
+               ORGANIZATION IS INDEXED
+               RECORD KEY IS RI-EMP-ID
+               FILE STATUS IS WS-FILE-STATUS.
+
+           SELECT RETIRE-REPORT
+               ASSIGN TO SUMMARY.
+
+       DATA DIVISION.
+
+       FILE SECTION.
+
+       SD SORT-FILE.
+       01  SORT-REC.
+           05 SR-DEPT-NAME              PIC X(36).
+           05 SR-JOB                    PIC X(8).
+           05 SR-LAST-NAME              PIC X(15).
+           05 SR-EMP-ID                 PIC X(6).
+           05 SR-DEPT-NO                PIC X(3).
+           05 SR-GENDER                 PIC X.
+           05 SR-ED-LEVEL               PIC 99.
+           05 SR-SALARY                 PIC 9(7)V99.
+           05 SR-BONUS                  PIC 9(7)V99.
+           05 SR-COMM                   PIC 9(7)V99.
+           05 SR-BIRTHDATE              PIC 9(8).
+           05 SR-HIREDATE               PIC 9(8).
+           05 SR-YEARS-OF-SERVICE       PIC 99.
+           05 SR-AGE                    PIC 99.
+
+       FD  RETIRE-FILE
+           RECORD CONTAINS 31 CHARACTERS.
+
+       01  RETIRE-INFO.
+           05 RI-EMP-ID         PIC X(6).
+           05 RI-GROSS-SALARY   PIC 9(7)V99 PACKED-DECIMAL.
+           05 RI-ED-BONUS       PIC 9(4)V99 PACKED-DECIMAL.
+           05 RI-PROGNAME       PIC X(8).
+           05 RI-DATE           PIC 9(8) PACKED-DECIMAL.
+           05 RI-TIME           PIC 9(4) PACKED-DECIMAL.
+
+       FD  RETIRE-REPORT
+           RECORD CONTAINS 132 CHARACTERS.
+
+       01  PRINT-REC            PIC X(132).
+
+       WORKING-STORAGE SECTION.
+
+           COPY EDBONUS.
+
+           EXEC SQL
+              INCLUDE EMP
+           END-EXEC
+
+           EXEC SQL
+              INCLUDE DEPT
+           END-EXEC
+
+           EXEC SQL
+              INCLUDE SQLCA
+           END-EXEC
+
+           EXEC SQL
+            DECLARE EMPCURS CURSOR FOR
+             SELECT A.EMPNO, A.JOB, A.LASTNAME, A.SEX, A.BIRTHDATE,
+             A.SALARY, A.HIREDATE, A.EDLEVEL, A.BONUS, A.COMM,
+              B.DEPTNAME, B.DEPTNO
+            FROM SCM.EMP A
+              INNER JOIN SCM.DEPT B
+                ON A.WORKDEPT= B.DEPTNO
+           END-EXEC
+
+       01  WS-DISPLAY-SQLCODE         PIC -999.
+
+       01  WORK-FIELDS.
+           05 MORE-RECORDS  PIC XXX VALUE 'YES'.
+              88 NO-MORE-RECORDS    VALUE 'NO'.
+           05 WS-EOT                  PIC XXX VALUE 'NO '.
+              88 EOT                          VALUE 'YES'.
+           05 WS-DEPT-HOLD-FIELD      PIC X(36).
+           05 WS-DEPT-NAME            PIC X(36).
+           05 WS-LINE-COUNT           PIC 99 VALUE 60.
+           05 WS-LINES                PIC 9.
+           05 WS-PAGE-COUNT           PIC 99.
+           05 WS-REC-COUNT            PIC 99.
+           05 WS-GROSS-SALARY         PIC 9(7)V99.
+           05 WS-GROSS-PAY            PIC 9(7)V99.
+           05 WS-ED-BONUS             PIC 9(4)V99.
+           05 WS-DEPT-COUNT           PIC 999.
+           05 WS-TOTAL-COUNT          PIC 9(4).
+           05 WS-FILE-STATUS          PIC XX.
+           05 WS-YEARS-OF-SERVICE     PIC 99.
+           05 WS-AGE                  PIC 99.
+           05 WS-FIRST-LINE           PIC X VALUE 'Y'.
+           05 WS-SORT-MAST-STATUS     PIC XX.
+              88 SUCCESSFUL-T VALUE '00'.
+
+       01  CURRENT-DATE-AND-TIME.
+           05 CD-YEAR                 PIC 9(4).
+           05 CD-MONTH                PIC 99.
+           05 CD-DAY                  PIC 99.
+           05 CD-HOUR                 PIC 99.
+           05 CD-MINUTE               PIC 99.
+
+       01  CIVILIAN-HOUR              PIC 99.
+
+       01  DAYS-OF-WEEK.
+           05                         PIC X(9) VALUE 'MONDAY'.
+           05                         PIC X(9) VALUE 'TUESDAY'.
+           05                         PIC X(9) VALUE 'WEDNESDAY'.
+           05                         PIC X(9) VALUE 'THURSDAY'.
+           05                         PIC X(9) VALUE 'FRIDAY'.
+           05                         PIC X(9) VALUE 'SATURDAY'.
+           05                         PIC X(9) VALUE 'SUNDAY'.
+
+       01  DAYS-OF-WEEK-R REDEFINES DAYS-OF-WEEK.
+           05 DAY-OF-WEEK-R OCCURS 7 TIMES  PIC X(9).
+
+       01  DAY-X                      PIC 9.
+
+       01  MONTHS.
+           05                         PIC X(9) VALUE 'JANUARY'.
+           05                         PIC X(9) VALUE 'FEBRUARY'.
+           05                         PIC X(9) VALUE 'MARCH'.
+           05                         PIC X(9) VALUE 'APRIL'.
+           05                         PIC X(9) VALUE 'MAY'.
+           05                         PIC X(9) VALUE 'JUNE'.
+           05                         PIC X(9) VALUE 'JULY'.
+           05                         PIC X(9) VALUE 'AUGUST'.
+           05                         PIC X(9) VALUE 'SEPTEMBER'.
+           05                         PIC X(9) VALUE 'OCTOBER'.
+           05                         PIC X(9) VALUE 'NOVEMBER'.
+           05                         PIC X(9) VALUE 'DECEMBER'.
+
+       01  MONTH-R REDEFINES MONTHS.
+           05 MONTH-NAME OCCURS 12 TIMES  PIC X(9).
+
+       01  DATE-OF-HIRE               PIC 9(8).
+       01  DATE-OF-BIRTH              PIC 9(8).
+       01  YEARS-OF-SERVICE           PIC 99 VALUE 30.
+       01  EMP-AGE                    PIC 99 VALUE 70.
+
+       01  TSO-ID                     PIC X(7) VALUE 'XSCS119'.
+
+       01  HEADING-LINE-1.
+           05 HL1-DAY-OF-WEEK         PIC X(9).
+           05                         PIC XX VALUE ', '.
+           05 HL1-MONTH               PIC X(9).
+           05                         PIC X VALUE SPACE.
+           05 HL1-DAY                 PIC Z9.
+           05                         PIC X VALUE SPACE.
+           05 HL1-YEAR                PIC 9(4).
+           05                         PIC X(30) VALUE SPACES.
+           05                  PIC X(22) VALUE 'LOVE 2 CODE CONSULTING'.
+           05                         PIC X(44) VALUE SPACES.
+           05                         PIC X(6) VALUE 'PAGE: '.
+           05 HL1-PAGE-NUM            PIC Z9.
+
+       01  HEADING-LINE-2.
+           05 HL2-HOUR              PIC Z9.
+           05                       PIC X VALUE ':'.
+           05 HL2-MINUTE            PIC 99.
+           05                       PIC X VALUE SPACE.
+           05 HL2-TIME-OF-DAY       PIC X.
+           05                       PIC X VALUE 'M'.
+           05                       PIC X(53) VALUE SPACES.
+           05                       PIC X(17) VALUE 'RETIREMENT REPORT'.
+
+       01  HEADING-LINE-3.
+           05                         PIC X(20) VALUE SPACES.
+           05                         PIC X(4) VALUE 'DEPT'.
+           05                         PIC X(83) VALUE SPACES.
+           05                         PIC X(8) VALUE 'YEARS OF'.
+           05                         PIC X(6) VALUE SPACES.
+           05                         PIC X(5) VALUE 'GROSS'.
+
+       01  HEADING-LINE-4.
+           05                         PIC X(20) VALUE SPACES.
+           05                         PIC X(4) VALUE 'NAME'.
+           05                         PIC X(22) VALUE SPACES.
+           05                         PIC X(5) VALUE 'TITLE'.
+           05                         PIC X(7) VALUE SPACES.
+           05                         PIC X(9) VALUE 'LAST NAME'.
+           05                         PIC X(4) VALUE SPACES.
+           05                         PIC X(6) VALUE 'GENDER'.
+           05                         PIC X VALUE SPACE.
+           05                         PIC X(9) VALUE 'BIRTHDATE'.
+           05                         PIC X(4) VALUE SPACES.
+           05                         PIC X(9) VALUE 'HIRE DATE'.
+           05                         PIC X(3) VALUE SPACES.
+           05                         PIC X(3) VALUE 'AGE'.
+           05                         PIC X VALUE SPACE.
+           05                         PIC X(7) VALUE 'SERVICE'.
+           05                         PIC X(7) VALUE SPACES.
+           05                         PIC X(6) VALUE 'SALARY'.
+
+       01  DETAIL-LINE.
+           05                         PIC X(4) VALUE SPACES.
+           05 DL-DEPT-NAME            PIC X(36).
+           05                         PIC X(4) VALUE SPACES.
+           05 DL-TITLE                PIC X(8).
+           05                         PIC X(3) VALUE SPACES.
+           05 DL-LAST-NAME            PIC X(15).
+           05                         PIC X(3) VALUE SPACES.
+           05 DL-GENDER               PIC X.
+           05                         PIC X(4) VALUE SPACES.
+           05 DL-BIRTH-DATE.
+              10 DL-BMONTH            PIC 99.
+              10                      PIC X VALUE '/'.
+              10 DL-BDAY              PIC 99.
+              10                      PIC X VALUE '/'.
+              10 DL-BYEAR             PIC 9(4).
+           05                         PIC X(3) VALUE SPACES.
+           05 DL-HIRE-DATE.
+              10 DL-HMONTH            PIC 99.
+              10                      PIC X VALUE '/'.
+              10 DL-HDAY              PIC 99.
+              10                      PIC X VALUE '/'.
+              10 DL-HYEAR             PIC 9(4).
+           05                         PIC X(3) VALUE SPACES.
+           05 DL-AGE                  PIC 99.
+           05                         PIC X(4) VALUE SPACES.
+           05 DL-YEARS-OF-SERVICE     PIC 99.
+           05                         PIC X(4) VALUE SPACES.
+           05 DL-GROSS-SALARY         PIC $$$$$,$$9.99.
+
+       01  DEPT-TOTAL-LINE.
+           05                         PIC X(66) VALUE SPACES.
+           05              PIC X(20) VALUE 'DEPT RETIRE COUNT:  '.
+           05 DTL-DEPT-TOTAL          PIC ZZ9.
+
+       01  GRAND-TOTAL-LINE.
+           05                         PIC X(63) VALUE SPACES.
+           05                   PIC X(21) VALUE 'TOTAL RETIRE COUNT:  '.
+           05 GTL-TOTAL               PIC Z,ZZ9.
+
+       PROCEDURE DIVISION.
+      *******************************************
+      *  MAIN PROCESSING MODULE.
+      *   - HOUSEKEEPING PERFORMED
+      *   - PRETEST LOOP IS PERFORMED UNTIL ALL RECORDS ARE READ
+      *     - FOR EACH RECORD READ, 110 PROCESS IS PERFORMED
+      *   - END OF JOB PERFORMED
+      *******************************************
+
+       000-MAIN-MODULE.
+
+           SORT SORT-FILE
+           ON ASCENDING KEY SR-DEPT-NAME
+                            SR-JOB
+                            SR-LAST-NAME
+           INPUT PROCEDURE IS SELECT-RECORDS
+           OUTPUT PROCEDURE IS OUTPUT-TO-FILE
+           STOP RUN.
+
+      *******************************************
+
+       SELECT-RECORDS.
+
+           PERFORM 100-HOUSEKEEPING-I
+           PERFORM UNTIL NO-MORE-RECORDS
+           MOVE SPACES TO LASTNAME-TEXT
+                          DEPTNAME-TEXT
+           EXEC SQL
+              FETCH EMPCURS
+              INTO :EMPNO, :JOB, :LASTNAME, :SEX, :BIRTHDATE,
+                   :SALARY, :HIREDATE, :EDLEVEL, :BONUS, :COMM,
+                   :DEPTNAME, :DEPTNO
+           END-EXEC
+               IF SQLCODE = 0
+                  PERFORM 110-CALC-ROUTINE-I
+               ELSE
+                  IF SQLCODE = 100
+                     MOVE 'NO ' TO MORE-RECORDS
+                  ELSE
+                     MOVE SQLCODE TO WS-DISPLAY-SQLCODE
+                     DISPLAY '*************************************'
+                     DISPLAY ' 100-HOUSEKEEPING-I'
+                     DISPLAY ' ERROR IN READING EMPLOYEE TABLE'
+                     DISPLAY ' SQLCODE CODE IS ' WS-DISPLAY-SQLCODE
+                     DISPLAY '*************************************'
+                  END-IF
+               END-IF
+           END-PERFORM
+           PERFORM 120-EOJ-I.
+      *******************************************
+      *  HOUSEKEEPING MODULE.
+      *  - FILES OPENED FOR PROCESSING
+      *******************************************
+
+       100-HOUSEKEEPING-I.
+
+           EXEC SQL
+              OPEN EMPCURS
+           END-EXEC
+
+           IF SQLCODE NOT = 0
+              MOVE SQLCODE TO WS-DISPLAY-SQLCODE
+              DISPLAY '*************************************'
+              DISPLAY ' 100-I-HOUSEKEEPING'
+              DISPLAY ' SQLCODE IS ' WS-DISPLAY-SQLCODE
+              DISPLAY '*************************************'
+           END-IF.
+
+      *******************************************
+      *  110-CALC-ROUTINE-I.
+      *  - THE SUB PROGRAM 'CBL08SUB' IS CALLED
+      *  - THE RECORDS ARE MOVED TO THE SORT FILE
+      *    WHEN THE SORT CRITERIA IS MET
+      *******************************************
+
+       110-CALC-ROUTINE-I.
+
+           MOVE BIRTHDATE(1:4) TO DATE-OF-BIRTH(1:4)
+           MOVE BIRTHDATE(6:2) TO DATE-OF-BIRTH(5:2)
+           MOVE BIRTHDATE(9:) TO DATE-OF-BIRTH(7:)
+           MOVE HIREDATE(1:4) TO DATE-OF-HIRE(1:4)
+           MOVE HIREDATE(6:2) TO DATE-OF-HIRE(5:2)
+           MOVE HIREDATE(9:) TO DATE-OF-HIRE(7:)
+           CALL 'CBL08SUB' USING  DATE-OF-HIRE
+                                  DATE-OF-BIRTH
+                                  YEARS-OF-SERVICE
+                                  EMP-AGE
+           IF YEARS-OF-SERVICE >= 30 AND EMP-AGE >= 70
+      *       MOVE VARIABLES TO SORT-RECORD
+
+              MOVE DEPTNO TO SR-DEPT-NO
+              MOVE EMPNO TO SR-EMP-ID
+              DISPLAY 'EMP ID 'SR-EMP-ID
+              MOVE YEARS-OF-SERVICE TO SR-YEARS-OF-SERVICE
+              MOVE EMP-AGE TO SR-AGE
+              MOVE SPACES TO SR-LAST-NAME
+              MOVE LASTNAME-TEXT TO SR-LAST-NAME
+              MOVE SPACES TO SR-DEPT-NAME
+              MOVE DEPTNAME-TEXT TO SR-DEPT-NAME
+              MOVE JOB TO SR-JOB
+              MOVE SEX TO SR-GENDER
+              MOVE EDLEVEL TO SR-ED-LEVEL
+              MOVE SALARY TO SR-SALARY
+              MOVE BONUS TO SR-BONUS
+              MOVE COMM TO SR-COMM
+              MOVE BIRTHDATE(1:4) TO SR-BIRTHDATE(1:4)
+              MOVE BIRTHDATE(6:2) TO SR-BIRTHDATE(5:2)
+              MOVE BIRTHDATE(9:) TO SR-BIRTHDATE(7:)
+              MOVE HIREDATE(1:4) TO SR-HIREDATE(1:4)
+              MOVE HIREDATE(6:2) TO SR-HIREDATE(5:2)
+              MOVE HIREDATE(9:) TO SR-HIREDATE(7:)
+              RELEASE SORT-REC
+           END-IF.
+      *******************************************
+      *  END OF JOB MODULE.
+      *  - FILES CLOSED
+      *******************************************
+
+       120-EOJ-I.
+           EXEC SQL
+              CLOSE EMPCURS
+           END-EXEC
+
+           IF SQLCODE NOT = 0
+              MOVE SQLCODE TO WS-DISPLAY-SQLCODE
+              DISPLAY '****************************'
+              DISPLAY ' 120-EOJ-I '
+              DISPLAY ' ERROR IN CLOSING EMP TABLE'
+              DISPLAY ' FILE STATUS IS = ' WS-DISPLAY-SQLCODE
+              DISPLAY '****************************'
+           END-IF.
+
+       OUTPUT-TO-FILE.
+
+           PERFORM 100-HOUSEKEEPING-O
+           PERFORM UNTIL NO-MORE-RECORDS
+             RETURN SORT-FILE
+               AT END
+                  MOVE 'NO' TO MORE-RECORDS
+               NOT AT END
+                  PERFORM 110-PROCESS-O
+             END-RETURN
+           END-PERFORM
+           PERFORM 120-EOJ-O.
+
+      **********************************************
+      * 100-HOUSEKEEPING-O
+      * - OUTPUT FILES ARE OPENED
+      * - FILE STATUS CHECKED
+      * - DAY AND TIME DETERMINED
+      **********************************************
+       100-HOUSEKEEPING-O.
+           MOVE 'YES' TO MORE-RECORDS
+           OPEN OUTPUT RETIRE-FILE
+                       RETIRE-REPORT
+
+           IF WS-FILE-STATUS NOT = '00'
+              DISPLAY '***********************************'
+              DISPLAY '100-HOUSEKEEPING-O'
+              DISPLAY 'ERROR IN OPENING SORTED MASTER FILE'
+              DISPLAY 'FILE STATUS IS ' WS-FILE-STATUS
+              DISPLAY '***********************************'
+           END-IF
+
+      * DETERMINE DAY OF WEEK
+           ACCEPT DAY-X FROM DAY-OF-WEEK
+           MOVE DAY-OF-WEEK-R(DAY-X) TO HL1-DAY-OF-WEEK
+
+      * CALCULATE CIVILIAN TIME
+           MOVE FUNCTION CURRENT-DATE TO CURRENT-DATE-AND-TIME
+           MOVE CURRENT-DATE-AND-TIME(1:8) TO RI-DATE
+           MOVE CURRENT-DATE-AND-TIME(9:4) TO RI-TIME
+           MOVE MONTH-NAME(CD-MONTH) TO HL1-MONTH
+           MOVE CD-DAY TO HL1-DAY
+           MOVE CD-YEAR TO HL1-YEAR
+
+           IF CD-HOUR < 12
+              IF CD-HOUR = 0
+                 MOVE 12 TO HL2-HOUR
+              ELSE
+                 MOVE CD-HOUR TO HL2-HOUR
+              END-IF
+              MOVE 'A' TO HL2-TIME-OF-DAY
+           ELSE
+              IF CD-HOUR > 12
+                 COMPUTE CIVILIAN-HOUR = CD-HOUR - 12
+                 MOVE CIVILIAN-HOUR TO HL2-HOUR
+              ELSE
+                 MOVE 12 TO HL2-HOUR
+              END-IF
+              MOVE 'P' TO HL2-TIME-OF-DAY
+           END-IF
+           MOVE CD-MINUTE TO HL2-MINUTE.
+
+      **********************************************************
+      * 110-PROCESS-O
+      * - EDUCATIONAL BONUS AND GROSS SALARY COMPUTED
+      * - DETAIL LINES WRITTEN
+      * - RETIRE-FILE WRITTEN
+      **********************************************************
+       110-PROCESS-O.
+           IF WS-LINE-COUNT > 43
+              PERFORM 210-HEADINGS-O
+           END-IF
+
+           IF WS-FIRST-LINE = 'Y'
+              MOVE 'N' TO WS-FIRST-LINE
+              MOVE SR-DEPT-NAME TO WS-DEPT-HOLD-FIELD
+                                   DL-DEPT-NAME
+           ELSE
+              MOVE SPACES TO DL-DEPT-NAME
+           END-IF
+
+      * CALCULATE EMPLOYEE BONUS
+              COMPUTE WS-GROSS-PAY = SR-SALARY + SR-BONUS + SR-COMM
+              SET WD-X, EL-X TO 1
+              SEARCH WK-DEPARTMENT
+                 WHEN WK-DEPT(WD-X) = SR-DEPT-NO
+                   IF ED-LVL(WD-X EL-X) >= 12
+                      SEARCH EDUCATION-LEVEL
+                        WHEN ED-LVL(WD-X EL-X) >= SR-ED-LEVEL
+                        COMPUTE WS-ED-BONUS ROUNDED =
+                             ED-BONUS-PER(WD-X EL-X) * WS-GROSS-PAY
+                      END-SEARCH
+                  ELSE
+                      MOVE 0 TO WS-ED-BONUS
+                  END-IF
+              END-SEARCH
+      * CALCULATE GROSS SALARY
+              COMPUTE WS-GROSS-SALARY = WS-GROSS-PAY + WS-ED-BONUS
+              MOVE WS-GROSS-SALARY TO RI-GROSS-SALARY
+              DISPLAY 'ED BONUS: ' WS-ED-BONUS
+              MOVE WS-ED-BONUS TO RI-ED-BONUS
+
+
+           IF WS-DEPT-HOLD-FIELD NOT = SR-DEPT-NAME
+              PERFORM 200-DEPT-BREAK-O
+           END-IF
+           MOVE SR-EMP-ID TO RI-EMP-ID
+           MOVE 'CBL08' TO RI-PROGNAME
+           MOVE SR-JOB TO DL-TITLE
+           MOVE SR-LAST-NAME TO DL-LAST-NAME
+           DISPLAY 'LAST NAME: ' DL-LAST-NAME
+           MOVE SR-GENDER TO DL-GENDER
+           MOVE SR-BIRTHDATE(5:2) TO DL-BMONTH
+           MOVE SR-BIRTHDATE(7:) TO DL-BDAY
+           MOVE SR-BIRTHDATE(1:4) TO DL-BYEAR
+           MOVE SR-HIREDATE(5:2) TO DL-HMONTH
+           MOVE SR-HIREDATE(7:) TO DL-HDAY
+           MOVE SR-HIREDATE(1:4) TO DL-HYEAR
+           MOVE SR-AGE TO DL-AGE
+           MOVE SR-YEARS-OF-SERVICE TO DL-YEARS-OF-SERVICE
+           MOVE WS-GROSS-SALARY TO DL-GROSS-SALARY
+
+           MOVE DETAIL-LINE TO PRINT-REC
+           WRITE PRINT-REC
+             AFTER WS-LINES
+           DISPLAY 'RECORD KEY ' RI-EMP-ID
+           WRITE RETIRE-INFO
+           IF WS-FILE-STATUS NOT = '00'
+              DISPLAY '***********************************'
+              DISPLAY '110-PROCESS-O'
+              DISPLAY 'ERROR IN WRITING SORTED MASTER FILE'
+              DISPLAY 'FILE STATUS IS ' WS-FILE-STATUS
+              DISPLAY '***********************************'
+           END-IF
+
+           ADD WS-LINES TO WS-LINE-COUNT
+           MOVE 2 TO WS-LINES
+           ADD 1 TO WS-DEPT-COUNT.
+
+      ********************************************************
+      * 120-EOJ-O
+      * - GRAND TOTAL LINE PRINTED
+      * - OUTPUT FILES CLOSED
+      * - FILE STATUS CHECKED
+      ********************************************************
+       120-EOJ-O.
+           MOVE 3 TO WS-LINES
+           PERFORM 200-DEPT-BREAK-O
+           MOVE WS-TOTAL-COUNT TO GTL-TOTAL
+           MOVE GRAND-TOTAL-LINE TO PRINT-REC
+           WRITE PRINT-REC
+              AFTER 2
+
+           CLOSE RETIRE-FILE
+                 RETIRE-REPORT
+
+           IF WS-FILE-STATUS NOT = '00'
+              DISPLAY '***********************************'
+              DISPLAY '120-EOJ-O'
+              DISPLAY 'ERROR IN CLOSING SORTED MASTER FILE'
+              DISPLAY 'FILE STATUS IS ' WS-FILE-STATUS
+              DISPLAY '***********************************'
+           END-IF.
+
+      *****************************************
+      * 200-DEPT-BREAK-O
+      * - DEPT. TOTAL LINES ARE PRINTED
+      *****************************************
+       200-DEPT-BREAK-O.
+           MOVE SR-DEPT-NAME TO DL-DEPT-NAME
+                                WS-DEPT-HOLD-FIELD
+           MOVE 3 TO WS-LINES
+           MOVE WS-DEPT-COUNT TO DTL-DEPT-TOTAL
+           MOVE DEPT-TOTAL-LINE TO PRINT-REC
+           WRITE PRINT-REC
+              AFTER WS-LINES
+           ADD WS-LINES TO WS-LINE-COUNT
+           ADD WS-DEPT-COUNT TO WS-TOTAL-COUNT
+           MOVE 0 TO WS-DEPT-COUNT.
+
+       210-HEADINGS-O.
+
+           MOVE TSO-ID TO PRINT-REC
+           WRITE PRINT-REC
+             AFTER PAGE
+
+           ADD 1 TO WS-PAGE-COUNT
+           MOVE WS-PAGE-COUNT TO HL1-PAGE-NUM
+           MOVE HEADING-LINE-1 TO PRINT-REC
+           WRITE PRINT-REC
+             AFTER 2
+
+           MOVE HEADING-LINE-2 TO PRINT-REC
+           WRITE PRINT-REC
+
+           MOVE HEADING-LINE-3 TO PRINT-REC
+           WRITE PRINT-REC
+             AFTER 2
+
+           MOVE HEADING-LINE-4 TO PRINT-REC
+           WRITE PRINT-REC
+
+           MOVE 3 TO WS-LINES
+           MOVE 0 TO WS-LINE-COUNT
+           MOVE 'YES' TO WS-FIRST-LINE.
+
+

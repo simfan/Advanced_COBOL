@@ -1,0 +1,492 @@
+
+       PROGRAM-ID. CBL09.
+       AUTHOR.  CHRIS GLOCK.
+       DATE-WRITTEN. 11/29/06.
+       DATE-COMPILED.
+      ******************************************************************
+      * PURPOSE:  THIS PROGRAM WILL READ RECORDS FROM A MEMBER THAT
+      * CONTAINS A LIST OF PEOPLE IN YOUR COBOL CLASS AND WILL
+      * WRITE EACH RECORD TO A NEW DATASET.
+      ******************************************************************
+
+       ENVIRONMENT DIVISION.
+
+       INPUT-OUTPUT SECTION.
+
+       FILE-CONTROL.
+
+           SELECT REAL-ESTATE-MSTR
+               ASSIGN TO REALEST
+               ORGANIZATION IS INDEXED
+               ACCESS IS DYNAMIC
+               RECORD KEY IS MAST-PARCEL-ID
+               ALTERNATE KEY MAST-AGENT-NO
+                 WITH DUPLICATES
+               FILE STATUS IS WS-MAST-STATUS.
+
+           SELECT AGENT-OUTPUT
+               ASSIGN TO AS-AGENT
+               FILE STATUS IS WS-OUTPUT-STATUS
+
+       DATA DIVISION.
+       FILE SECTION.
+
+           COPY RESTMAST.
+
+       FD  AGENT-OUTPUT
+           RECORD CONTAINS 21 TO 171 CHARACTERS.
+
+       01  OUTPUT-REC.
+           05 OR-KEY.
+              10 OR-AGENT-NUM        PIC X(6).
+              10 OR-CUR-DATE         PIC 9(8).
+           05 OR-TOTAL-COMM          PIC 9(7)V99 PACKED-DECIMAL.
+           05 OR-CURRENT-PROPERTIES  PIC 99.
+           05 OR-PARCEL-INFO OCCURS 0 TO 10 TIMES DEPENDING ON
+              OR-CURRENT-PROPERTIES.
+              10 OR-PARCEL-ID        PIC X(5).
+              10 OR-EXPIRATION-DATE  PIC 9(8) PACKED-DECIMAL.
+              10 OR-POTENT-COMM      PIC 9(6)V99 PACKED-DECIMAL.
+
+       FD  SUMMARY
+           RECORD CONTAINS 132 CHARACTERS.
+
+       01  PRINT-REC             PIC X(132).
+
+       WORKING-STORAGE SECTION.
+
+           EXEC SQL
+              INCLUDE EMP
+           END-EXEC
+
+           EXEC SQL
+              INCLUDE SQLCA
+           END-EXEC
+
+           EXEC SQL
+              DECLARE EMPCURS CURSOR
+                SELECT EMPNO, FIRSTNME, MIDINIT, LASTNAME
+                  INTO :EMPNO, :FIRSTNME, :MININIT, :LASTNAME
+                  FROM SCM.EMP
+                  WHERE WORKDEPT = 'D11'
+                  ORDER BY LASTNAME
+           END-EXEC
+
+       01 SELLING-PRICE        PIC 9(7)V99.
+       01 COMMISSION           PIC 9(6)V99.
+
+       01  WORK-FIELDS.
+           05 MORE-RECORDS            PIC XXX VALUE 'YES'.
+              88 NO-MORE-RECORDS              VALUE 'NO '.
+
+           05 WS-FIRST-LINE           PIC XXX VALUE 'YES'.
+           05 WS-LINE-COUNT           PIC 99.
+           05 WS-LINES                PIC 9.
+           05 WS-PAGE-COUNT           PIC 99.
+           05 WS-DATE.
+              10 WS-YEAR              PIC 9(4).
+              10 WS-MONTH             PIC 99.
+              10 WS-DAY               PIC 99.
+           05 WS-DATE-R REDEFINES WS-DATE PIC 9(8).
+           05 WS-DATE-INTEGER         PIC 9(8).
+           05 WS-LDATE.
+              10 WS-LYEAR              PIC 9(4).
+              10 WS-LMONTH             PIC 99.
+              10 WS-LDAY               PIC 99.
+           05 WS-LDATE-R REDEFINES WS-LDATE PIC 9(8).
+           05 WS-LDATE-INTEGER         PIC 9(8).
+           05 WS-AGENT-COUNT           PIC 99.
+           05 WS-CURRENT               PIC 99.
+           05 WS-EXPIRED               PIC 99.
+           05 WS-TOTAL-CURRENT         PIC 999.
+           05 WS-TOTAL-EXPIRED         PIC 999.
+           05 WS-DAY-COUNT             PIC 999.
+
+           05 WS-DISPLAY-SQL-CODE     PIC -999.
+           05 WS-MAST-STATUS          PIC XX.
+           05 WS-OUTPUT-STATUS        PIC XX.
+
+           COPY TAXTABLE.
+
+       01  TSO-ID                     PIC X(7) VALUE 'XSCS119'.
+
+       01  HEADING-LINE-1.
+           05 HL1-DATE.
+              10 HL1-MONTH            PIC Z9.
+              10                      PIC X VALUE '/'.
+              10 HL1-DAY              PIC 99.
+              10                      PIC X VALUE '/'.
+              10 HL1-YEAR             PIC 9(4).
+           05                         PIC X(47) VALUE SPACES.
+           05                      PIC X(17) VALUE 'GLOCK REAL ESTATE'.
+           05                         PIC X(50) VALUE SPACES.
+           05                         PIC X(6) VALUE 'PAGE: '.
+           05 HL1-PAGE                PIC Z9.
+
+       01  HEADING-LINE-2.
+           05 HL2-TIME.
+              10 HL2-HOUR             PIC Z9.
+              10                      PIC X VALUE ':'.
+              10 HL2-MINUTE           PIC 99.
+              10                      PIC X VALUE SPACE.
+              10 HL2-TIME-OF-DAY      PIC X.
+              10                      PIC X VALUE 'M'.
+           05                         PIC X(51) VALUE SPACES.
+           05                         PIC X(13) VALUE 'PARCEL REPORT'.
+
+       01  HEADING-LINE-3.
+           05                         PIC X(6) VALUE 'PARCEL'.
+           05                         PIC X(58) VALUE SPACES.
+           05                         PIC X(7) VALUE 'SELLING'.
+           05                         PIC X(13) VALUE SPACES.
+           05                         PIC X(4) VALUE 'LIST'.
+           05                         PIC X(6) VALUE SPACES.
+           05                         PIC X(5) VALUE 'FIRST'.
+           05                         PIC X(6) VALUE SPACES.
+           05                         PIC X(6) VALUE 'SECOND'.
+           05                         PIC X(3) VALUE SPACES.
+           05                         PIC X(8) VALUE 'PROPERTY'.
+
+       01  HEADING-LINE-4.
+           05                         PIC X(4) VALUE '  ID'.
+           05                         PIC X(22) VALUE SPACES.
+           05                         PIC X(14) VALUE 'PARCEL ADDRESS'.
+           05                         PIC X(25) VALUE SPACES.
+           05                         PIC X(5) VALUE 'PRICE'.
+           05                         PIC X(5) VALUE SPACES.
+           05                         PIC X(5) VALUE 'SQ FT'.
+           05                         PIC X(4) VALUE SPACES.
+           05                         PIC X(4) VALUE 'DATE'.
+           05                         PIC X(5) VALUE SPACES.
+           05                         PIC X(8) VALUE 'MORTGAGE'.
+           05                         PIC X(3) VALUE SPACES.
+           05                         PIC X(8) VALUE 'MORTGAGE'.
+           05                         PIC X(4) VALUE SPACES.
+           05                         PIC X(3) VALUE 'TAX'.
+
+       01  AGENT-HEADING.
+           05                         PIC X(12) VALUE 'PARCELS FOR '.
+           05                         PIC X(7) VALUE 'AGENT: '.
+           05 AH-AGENT                PIC X(36).
+
+       01  DETAIL-LINE.
+           05 DL-PARCEL-ID            PIC X(5).
+           05                         PIC X VALUE SPACE.
+           05 DL-PARCEL-ADDRESS       PIC X(55).
+           05                         PIC X VALUE SPACE.
+           05 DL-SELLING-PRICE        PIC Z,ZZZ,ZZ9.99.
+           05                         PIC X VALUE SPACE.
+           05 DL-SQFT                 PIC Z,ZZ9.
+           05                         PIC X VALUE SPACE.
+           05 DL-LIST-DATE.
+              10 DL-LIST-MONTH        PIC 99.
+              10                      PIC X VALUE '/'.
+              10 DL-LIST-DAY          PIC 99.
+              10                      PIC X VALUE '/'.
+              10 DL-LIST-YEAR         PIC 9(4).
+           05                         PIC X VALUE SPACE.
+           05 DL-F-MORTGAGE           PIC ZZZ,ZZ9.99.
+           05                         PIC X VALUE SPACE.
+           05 DL-S-MORTGAGE           PIC ZZZ,ZZ9.99.
+           05                         PIC X VALUE SPACE.
+           05 DL-TAX                  PIC Z,ZZ9.99
+           05                         PIC X VALUE SPACE.
+           05 DL-EXPIRED              PIC X(9).
+
+       01  DETAIL-LINE-B.
+           05                         PIC X(44).
+           05                         PIC X(15) VALUE 'THIS AGENT DOES'.
+           05                         PIC X(14) VALUE ' NOT HAVE ANY '.
+           05                         PIC X(15) VALUE 'CURRENT PARCELS'.
+
+       01  AGENT-TOTAL-LINE.
+           05 AT-AGENT                PIC X(53).
+           05                         PIC X(10) VALUE '   CURRENT'.
+           05                         PIC X(10) VALUE ' PARCELS: '.
+           05 AT-CURRENT-PARCELS      PIC ZZ9.
+           05                         PIC X(10) VALUE '   EXPIRED'.
+           05                         PIC X(10) VALUE ' PARCELS: '.
+           05 AT-EXPIRED-PARCELS      PIC ZZ9.
+
+       01  TOTAL-LINE-1.
+           05                         PIC X(51) VALUE SPACES.
+           05                         PIC X(13) VALUE 'TOTAL AGENTS '.
+           05                         PIC X(10) VALUE 'PROCESSED:'.
+           05                         PIC X(5) VALUE SPACES.
+           05 TL1-TOTAL-AGENTS        PIC ZZ9.
+
+       01  TOTAL-LINE-2.
+           05                         PIC X(51) VALUE SPACES.
+           05                         PIC X(14) VALUE 'TOTAL CURRENT '.
+           05                         PIC X(12) VALUE 'PROPERTIES: '.
+           05 TL2-TOTAL-CURRENT       PIC Z,ZZ9.
+
+       01  TOTAL-LINE-3.
+           05                         PIC X(51) VALUE SPACES.
+           05                         PIC X(14) VALUE 'TOTAL EXPIRED '.
+           05                         PIC X(12) VALUE 'PROPERTIES: '.
+           05 TL3-TOTAL-EXPIRED       PIC Z,ZZ9.
+
+       PROCEDURE DIVISION.
+      *******************************************
+      *  MAIN PROCESSING MODULE.
+      *   - HOUSEKEEPING PERFORMED
+      *   - PRETEST LOOP IS PERFORMED UNTIL ALL RECORDS ARE READ
+      *     - FOR EACH RECORD READ, 110 PROCESS IS PERFORMED
+      *   - END OF JOB PERFORMED
+      *******************************************
+
+       000-MAIN-MODULE.
+
+           PERFORM 100-HOUSEKEEPING.
+
+           PERFORM UNTIL NO-MORE-RECORDS
+      * FETCH EMPCURS
+           EXEC SQL
+              FETCH EMPCURS
+              INTO :EMPNO, :JOB, :LASTNAME, :SEX, :BIRTHDATE,
+                   :SALARY, :HIREDATE, :EDLEVEL, :BONUS, :COMM,
+                   :DEPTNAME, :DEPTNO
+           END-EXEC
+             MOVE SPACES TO LASTNAME-TEXT
+                            FIRSTNME-TEXT
+
+               IF SQLCODE = 100
+                 MOVE 'NO ' TO MORE-RECORDS
+               ELSE
+                  IF SQLCODE = 0
+                     PERFORM 110-PROCESS
+                  ELSE
+                     MOVE SQLCODE TO WS-DISPLAY-SQLCODE
+                     DISPLAY '*************************************'
+                     DISPLAY ' 100-HOUSEKEEPING-I'
+                     DISPLAY ' ERROR IN READING EMPLOYEE TABLE'
+                     DISPLAY ' SQLCODE CODE IS ' WS-DISPLAY-SQLCODE
+                     DISPLAY '*************************************'
+                  END-IF
+              END-IF
+           END-PERFORM.
+
+           PERFORM 120-END-OF-JOB.
+
+           STOP RUN.
+
+      *******************************************
+      *  HOUSEKEEPING MODULE.
+      *  - FILES OPENED FOR PROCESSING
+      *******************************************
+
+       100-HOUSEKEEPING.
+
+           OPEN INPUT REAL-ESTATE-FILE
+                OUTPUT AGENT-OUTPUT
+                       SUMMARY.
+
+
+           IF WS-MAST-STATUS NOT = '00'
+              MOVE 'NO ' TO MORE-RECORDS
+              DISPLAY '****************************'
+              DISPLAY ' 100-HOUSEKEEPING'
+              DISPLAY ' ERROR IN OPENING THE MASTER FILE'
+              DISPLAY ' FILE STATUS IS ', WS-MAST-STATUS
+              DISPLAY '****************************'
+           END-IF
+
+           IF WS-OUTPUT-STATUS NOT = '00'
+              MOVE 'NO ' TO MORE-RECORDS
+              DISPLAY '****************************'
+              DISPLAY ' 100-HOUSEKEEPING'
+              DISPLAY ' ERROR IN OPENING THE OUTPUT FILE'
+              DISPLAY ' FILE STATUS IS ', WS-OUTPUT-STATUS
+              DISPLAY '****************************'
+           END-IF
+
+      *******************************************
+      *  DETAIL PROCESS MODULE.
+      *  - AN EXPLAINATION OF THE PROCESSING FOR EACH
+      *    RECORD BELONGS HERE
+      *******************************************
+
+       110-PROCESS.
+           MOVE 'YES' TO MORE-RECORDS
+                         MORE-PARCELS
+      *                  WS-FIRST-LINE
+
+           IF WS-FIRST-LINE = 'NO '
+              PERFORM 320-AGENT-HEADING
+           END-IF
+
+           MOVE EMPNO TO MAST-AGENT-NO
+           READ MAST-REC
+             KEY IS MAST-AGENT-NO
+
+           IF WS-MAST-STATUS = '00' OR '02'
+
+              PERFORM 200-WRITE-PARCEL-BY-AGENT
+                UNTIL END-OF-AGENT
+           ELSE
+              IF WS-MAST-STATUS = '23'
+      *          PERFORM 320-AGENT-HEADING
+                 MOVE DETAIL-LINE-B TO WS-PRINT-REC
+                 WRITE PRINT-REC
+              END-IF
+           END-IF
+           ADD 1 TO WS-AGENT-COUNT
+      *    WRITE CLASS-REC-OUT
+
+      *******************************************
+      *  END OF JOB MODULE.
+      *  - FILES CLOSED
+      *******************************************
+
+       120-END-OF-JOB.
+
+           DISPLAY ' NUMBER OF RECORDS PROCESSED = ' WS-REC-COUNT
+           CLOSE COBOL-CLASS-IN
+                 COBOL-CLASS-OUT.
+
+      ******************************************************
+      * 200-WRITE-PARCEL-BY-AGENT
+      * - THE FILE STATUS IS CHECKED AND THE DETAIL LINE IS
+      *   WRITTEN
+      ******************************************************
+       200-WRITE-PARCEL-BY-AGENT.
+           IF WS-LINE-COUNT > 40
+              PERFORM 310-HEADINGS
+           END-IF
+
+           IF WS-FIRST-LINE AND ( WS-MAST-STATUS = '00' OR '02')
+              PERFORM 310-HEADINGS
+      * WRITE AGENT HEADING LINE
+              MOVE 'NO' TO WS-FIRST-LINE
+              PERFORM 300-PROCESS-DETAIL-LINE
+      * DETAIL LINE ***********************************
+           ELSE
+              IF WS-MAST-STATUS = '00' OR '02'
+                 PERFORM 300-PROCESS-DETAIL-LINE
+              END-IF
+           END-IF
+
+      **********************************************************
+      * THE FOLLOWING OCCURS AFTER THE LAST PARCEL FOR AN AGENT
+      * HAS BEEN WRITTEN
+      **********************************************************
+           IF WS-MAST-STATUS = '00'
+              MOVE WS-TOTAL-COMMISSION TO OR-TOTAL-COMM
+              MOVE WS-CURRENT TO OR-CURRENT-PROPERTIES
+              PERFORM VARYING WS-COUNTER FROM 1 BY 1
+                UNTIL WS-COUNTER > WS-CURRENT
+                   MOVE WS-PARCEL-ID(WS-COUNTER) TO
+                           OR-PARCEL-ID(WS-COUNTER)
+                   MOVE WS-LIST-DATE(WS-COUNTER) TO
+                        OR-LIST-DATE(WS-COUNTER)
+                   MOVE WS-COMMISSION(WS-COUNTER) TO
+                        OR-COMMISSION(WS-COUNTER)
+              END-PERFORM
+              WRITE OUTPUT-REC
+
+              STRING 'TOTALS FOR AGENT: ' DELIMITED BY SIZE
+                 EMPNO DELIMITED BY '  '
+                 ' ' DELIMITED BY SIZE
+                 LASTNAME-TEXT DELIMITED BY '  '
+                 ', ' DELIMITED BY SIZE
+                 FIRSTNME-TEXT DELIMITED BY '  '
+              INTO AT-AGENT
+
+              MOVE WS-CURRENT TO AT-CURRENT-PARCELS
+              MOVE WS-EXPIRED TO AT-EXPIRED-PARCELS
+              MOVE AGENT-TOTAL-LINE TO PRINT-REC
+              WRITE PRINT-REC
+                AFTER WS-LINES
+              ADD WS-CURRENT TO WS-TOTAL-CURRENT
+              ADD WS-EXPIRED TO WS-TOTAL-EXPIRED
+              MOVE 0 TO WS-EXPIRED
+                        WS-CURRENT
+              SET END-OF-AGENT TO TRUE
+           ELSE
+              READ REAL-ESTATE-MSTR NEXT
+              IF WS-MAST-STATUS = '10'
+                 SET EOF TO TRUE
+              ELSE
+                 IF WS-MAST-STATUS NOT = '00' AND
+                    WS-MAST-STATUS NOT = '02'
+                    SET EOF TO TRUE
+                    SET END-OF-AGENT TO TRUE
+                    DISPLAY ' *****************************'
+                    DISPLAY ' 200-WRITE-PARCEL-BY-AGENT'
+                    DISPLAY ' ERROR IN READING THE MASTER FILE'
+                    DISPLAY ' FILE STATUS IS ', WS-MAST-STATUS
+                    DISPLAY ' *****************************'
+              END-IF
+           END-IF
+       300-PROCESS-DETAIL-LINE
+           COMPUTE WS-DATE-INTEGER = FUNCTION INTEGER-OF-DATE(WS-DATE-R)
+           COMPUTE WS-LDATE-INTEGER =
+                      FUNCTION INTEGER-OF-DATE(WS-LDATE-R)
+           COMPUTE WS-DAY-COUNT = WS-DATE-INTEGER - WS-LDATE-INTEGER
+           MOVE MAST-AGENT-ID TO OR-AGENT-NUM
+           MOVE WS-DATE-R TO OR-CUR-DATE
+           IF WS-DAY-COUNT > 120
+              MOVE ' * EXPIRED' TO WS-EXPIRED
+              ADD 1 TO WS-EXPIRED
+           ELSE
+              MOVE SPACES TO WS-EXPIRED
+              ADD 1 TO WS-CURRENT
+              MOVE MAST-PARCEL-ID TO WS-PARCEL-ID(WS-CURRENT)
+              MOVE MAST-LIST-DATE TO WS-LIST-DATE(WS-CURRENT)
+              MOVE MAST-SELL-PRICE TO SELLING-PRICE
+              CALL 'CBL09SUB' USING SELLING-PRICE
+                                    COMMISSION
+
+              MOVE COMMISSION TO WS-COMMISSION(WS-CURRENT)
+              ADD WS-COMMISSION(WS-CURRENT) TO WS-TOTAL-COMMISSION
+              END-IF
+      * WRITE DETAIL LINE
+              MOVE MAST-PARCEL-ID TO DL-PARCEL-ID
+              STRING MAST-STREET-NUM DELIMITED BY '  '
+                 ' ' DELIMITED BY SIZE
+                 MAST-STREET-NAME DELIMITED BY '  '
+                 ' ' DELIMITED BY SIZE
+                 MAST-TOWN DELIMITED BY '  '
+                 ', ' DELIMITED BY SIZE
+                 MAST-STATE DELIMITED BY '  '
+                 ' ' DELIMITED SIZE
+                 MAST-ZIP-CODE DELIMITED BY '  '
+              INTO DL-PARCEL-ADDRESS
+              MOVE MAST-SELL-PRICE TO DL-SELLING-PRICE
+              MOVE MAST-SQUARE-FEET TO DL-SQFT
+              MOVE MAST-LIST-DATE(5:) TO DL-LIST-YEAR
+              MOVE MAST-LIST-DATE(1:2) TO DL-LIST-MONTH
+              MOVE MAST-LIST-DATE(3:2) TO DL-LIST-DAY
+              MOVE MAST-FIRST-MORTGAGE TO DL-F-MORTGAGE
+              MOVE MAST-SECOND-MORTGAGE TO DL-S-MORTGAGE
+              MOVE WS-TAX TO DL-TAX
+              MOVE WS-EXPIRED TO DL-EXPIRED
+              MOVE DETAIL-LINE TO PRINT-REC
+              WRITE PRINT-REC
+                AFTER WS-LINES
+              ADD WS-LINES TO WS-LINE-COUNT
+
+       310-HEADINGS.
+
+
+
+
+
+
+
+           PERFORM 320-AGENT-HEADING
+       320-AGENT-HEADING.
+           STRING EMPNO DELIMITED BY '  '
+              ' ' DELIMITED BY SIZE
+              LASTNAME-TEXT DELIMITED BY '  '
+              ', ' DELIMITED BY SIZE
+              FIRSTNME-TEXT DELIMITED BY '  '
+           INTO AH-AGENT
+           MOVE AGENT-HEADING TO PRINT-REC
+           WRITE PRINT-REC
+             AFTER 2.
+
+
+      *       PERFORM 300-PROCESS-DETAIL-LINE
+

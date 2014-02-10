@@ -1,0 +1,43 @@
+       IDENTIFICATION DIVISION.
+
+       PROGRAM-ID.  CBL09SUB.
+       AUTHOR.  CHRIS GLOCK.
+       DATE-WRITTEN.  12/01/06
+       DATE-COMPILED.
+      **************************************************
+      * PURPOSE:  THIS SUBPROGRAM WILL CALCULATE THE AGE
+      *           AND YEARS OF SERVICE FOR EACH EMPLOYEE
+      **************************************************
+
+       ENVIRONMENT DIVISION.
+       INPUT-OUTPUT SECTION.
+
+       FILE-CONTROL.
+
+       DATA DIVISION.
+       FILE SECTION.
+
+       WORKING-STORAGE SECTION.
+       01 WS-GREATER-PRICE      PIC 9(7)V99.
+       01 WS-GREATER-COMM       PIC 9(6)V99.
+       01 WS-COMM               PIC 9(6)V99.
+
+       LINKAGE SECTION.
+       01  SELLING-PRICE        PIC 9(7)V99.
+       01  COMMISSION           PIC 9(6)V99.
+
+       PROCEDURE DIVISION USING SELLING-PRICE
+                                COMMISSION
+
+      *   DETERMINE POTENTIAL COMMISSION
+           IF SELLING-PRICE > 75000
+              COMPUTE WS-GREATER-PRICE = SELLING-PRICE - 75000
+              COMPUTE WS-COMM ROUNDED = 75000 * .0525
+              COMPUTE WS-GREATER-COMM ROUNDED = GREATER-PRICE * .0715
+              COMPUTE COMMISSION = WS-COMM + WS-GREATER-COMM
+           ELSE
+              COMPUTE COMMISSION ROUNDED = SELLING-PRICE * .0525
+           END-IF
+
+           EXIT PROGRAM.
+

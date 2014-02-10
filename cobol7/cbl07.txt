@@ -1,0 +1,592 @@
+       IDENTIFICATION DIVISION.
+
+       PROGRAM-ID. CBL07.
+       AUTHOR.  CHRIS GLOCK.
+       DATE-WRITTEN. 09/09/06.
+       DATE-COMPILED.
+      ******************************************************************
+      * PURPOSE:  THIS PROGRAM WILL READ RECORDS FROM A MEMBER THAT
+      * CONTAINS A LIST OF PEOPLE IN YOUR COBOL CLASS AND WILL
+      * WRITE EACH RECORD TO A NEW DATASET.
+      ******************************************************************
+
+       ENVIRONMENT DIVISION.
+
+       INPUT-OUTPUT SECTION.
+
+       FILE-CONTROL.
+
+           SELECT MASTER-FILE
+               ASSIGN TO MASTER
+               ORGANIZATION IS INDEXED
+               ACCESS IS SEQUENTIAL
+               RECORD KEY IS MI-CUST-ID
+               FILE STATUS IS WS-MAST-STATUS.
+
+           SELECT INVENT-IN
+               ASSIGN TO INVENT
+               ORGANIZATION IS INDEXED
+               ACCESS IS RANDOM
+               RECORD KEY IS II-ITEM-NUM
+               FILE STATUS IS WS-INVENT-STATUS.
+
+           SELECT TRANS-OUT
+               ASSIGN TO AS-TRANSOUT
+               FILE STATUS IS WS-TRANS-STATUS.
+
+           SELECT SUMMARY-REPORT
+               ASSIGN TO SUMMARY.
+
+           SELECT INVOICE-REPORT
+               ASSIGN TO INVOICE.
+
+       DATA DIVISION.
+
+
+       FILE SECTION.
+
+       FD   MASTER-FILE
+            RECORD CONTAINS 77 TO 158 CHARACTERS.
+
+
+       01   MASTER-INFO.
+            05 MI-CUST-ID                   PIC X(5).
+            05 MI-CUST-NAME                 PIC X(25).
+            05 MI-CUST-ADDRESS              PIC X(18).
+            05 MI-CUST-CITY                 PIC X(10).
+            05 MI-CUST-STATE                PIC X(2).
+            05 MI-CUST-ZIP                  PIC 9(5) PACKED-DECIMAL.
+            05 MI-ZONE                      PIC X.
+            05 MI-NUM-ITEMS                 PIC 99.
+            05 MI-ITEM-INFO OCCURS 1 TO 10 TIMES
+               DEPENDING ON MI-NUM-ITEMS.
+               10 MI-ITEM-NUM               PIC X(6).
+               10 MI-ITEM-WEIGHT            PIC 999.
+
+       FD  INVENT-IN
+           RECORD CONTAINS 16 CHARACTERS.
+
+       01  INVENT-INFO.
+           05 II-ITEM-NUM                   PIC X(6).
+           05 II-ITEM-COST                  PIC 9(3)V99 PACKED-DECIMAL.
+           05 II-ITEM-RETAIL                PIC 9(4)V99 PACKED-DECIMAL.
+           05 II-ITEM-WEIGHT                PIC 9(3).
+
+
+       FD  TRANS-OUT
+           RECORD CONTAINS 19 TO 95 CHARACTERS.
+
+       01  CUST-INFO.
+           05                               PIC X.
+           05 TC-CUST-ID                    PIC X(5).
+           05 TC-CUST-NAME                  PIC X(25).
+           05 TC-CUST-ADDRESS               PIC X(18).
+           05 TC-CUST-CITY                  PIC X(10).
+           05 TC-CUST-STATE                 PIC XX.
+           05 TC-CUST-ZIP                   PIC 9(9) PACKED-DECIMAL.
+           05 TC-SHIP-ZONE                  PIC X.
+           05 TC-NUM-ITEMS-ORDERED          PIC 99.
+           05 TC-BILLING-DATE               PIC 9(8) PACKED-DECIMAL.
+           05 TC-DUE-DATE                   PIC 9(8) PACKED-DECIMAL.
+           05 TC-TOTAL-DUE                  PIC 9(7)V99 PACKED-DECIMAL.
+
+       01  ITEM-INFO.
+           05 TI-REC-TYPE                   PIC X.
+           05 TI-ITEM-NUM                   PIC X(6).
+           05 TI-RETAIL-AMT                 PIC 9(4)V99 PACKED-DECIMAL.
+           05 TI-ITEM-COST                  PIC 9(3)V99 PACKED-DECIMAL.
+           05 TI-ITEM-WEIGHT                PIC 9(3).
+           05 TI-QTY-ORDERED                PIC 9(3).
+
+       FD  SUMMARY-REPORT
+           RECORD CONTAINS 132 CHARACTERS.
+
+       01  S-PRINT-REC                      PIC X(132).
+
+       FD  INVOICE-REPORT
+           RECORD CONTAINS 80 CHARACTERS.
+
+       01  I-PRINT-REC                      PIC X(80).
+
+       WORKING-STORAGE SECTION.
+
+      *INCLUDE SQL HERE*************************************************
+      *
+      *    EXEC SQL
+      *       INCLUDE PARTS
+      *    END-EXEC.
+
+           EXEC SQL
+              INCLUDE SQLCA
+           END-EXEC.
+      ******************************************************************
+       01  WORK-FIELDS.
+           05 WS-MORE-RECORDS  PIC XXX VALUE 'YES'.
+              88 EOF VALUE 'NO'.
+           05 WS-PAGE-CNT            PIC 99.
+           05 WS-LINE-CNT            PIC 99 VALUE 60.
+           05 WS-LINES               PIC 9.
+           05 WS-DATE.
+              10 WS-YEAR             PIC 9(4).
+              10 WS-MONTH            PIC 99.
+              10 WS-DAY              PIC 99.
+           05 WS-DATE-R REDEFINES WS-DATE PIC 9(8).
+           05 WS-DUE-DATE            PIC 9(8).
+           05 WS-DUE-DATE-R REDEFINES WS-DUE-DATE.
+              10 WS-D-YEAR           PIC 9(4).
+              10 WS-D-MONTH          PIC 99.
+              10 WS-D-DAY            PIC 99.
+           05 WS-DATE-INTEGER        PIC 9(8).
+           05 WS-ZIP                 PIC 9(9).
+           05 WS-SUB-TOTAL           PIC 9(5)V99.
+           05 WS-SHIP                PIC 99V99.
+           05 WS-TAX                 PIC 9(3)V99.
+           05 WS-TOTAL               PIC 9(5)V99.
+           05 WS-GRAND-TOTAL         PIC 9(6)V99.
+           05 WS-COUNTER             PIC 99.
+           05 WS-CUST-NAME           PIC 9(25).
+           05 WS-MAST-STATUS         PIC XX.
+           05 WS-INVENT-STATUS       PIC XX.
+           05 WS-TRANS-STATUS        PIC XX.
+
+        01 CURRENT-DATE-AND-TIME.
+           05 CD-YEAR                PIC 9(4).
+           05 CD-MONTH               PIC 99.
+           05 CD-DAY                 PIC 99.
+           05 CD-HOUR                PIC 99.
+           05 CD-MINUTE              PIC 99.
+
+        01 MONTH-TABLE.
+           05                        PIC X(9) VALUE 'JANUARY'.
+           05                        PIC X(9) VALUE 'FEBRUARY'.
+           05                        PIC X(9) VALUE 'MARCH'.
+           05                        PIC X(9) VALUE 'APRIL'.
+           05                        PIC X(9) VALUE 'MAY'.
+           05                        PIC X(9) VALUE 'JUNE'.
+           05                        PIC X(9) VALUE 'JULY'.
+           05                        PIC X(9) VALUE 'AUGUST'.
+           05                        PIC X(9) VALUE 'SEPTEMBER'.
+           05                        PIC X(9) VALUE 'OCTOBER'.
+           05                        PIC X(9) VALUE 'NOVEMBER'.
+           05                        PIC X(9) VALUE 'DECEMBER'.
+
+        01 MONTH-R REDEFINES MONTH-TABLE.
+           05 MONTH OCCURS 12 TIMES PIC X(9).
+
+        01 SHIP-TABLE.
+           05           PIC X(3)  VALUE '075'.
+           05           PIC X(28) VALUE '0425075009001200160020002500'.
+           05           PIC X(3)  VALUE '062'.
+           05           PIC X(28) VALUE '0550087510251325172521252625'.
+           05           PIC 9(3)  VALUE '055'.
+           05           PIC X(28) VALUE '0475080009501250165020502550'.
+           05           PIC 9(3)  VALUE '042'.
+           05           PIC X(28) VALUE '0445077009201220162020202520'.
+           05           PIC 9(3)  VALUE '039'.
+           05           PIC X(28) VALUE '0355068008301130153019302430'.
+           05           PIC 9(3)  VALUE '037'.
+           05           PIC X(28) VALUE '0250042507500900120016002000'.
+
+
+       01 SHIP-R REDEFINES SHIP-TABLE.
+          05 SP-INFO OCCURS 6 TIMES INDEXED BY SHIP-X.
+             10 SP-TAX                PIC V9(3).
+             10 SHIP-CHG OCCURS 7 TIMES INDEXED BY CHARGE-X.
+                15 SP-SHIP-CHARGE     PIC 99V99.
+
+       01 WEIGHT-TABLE.
+          05           PIC X(14) VALUE 01051020407099.
+
+       01 WEIGHT-TABLE-R REDEFINES WEIGHT-TABLE.
+          05 WEIGHT-INFO OCCURS 7 TIMES INDEXED BY WEIGHT-X.
+             10 WT-WEIGHT              PIC 99.
+
+      ****************************************************
+      *  THE FOLLOWING CODE IS FOR THE INVOICE LINES     *
+      ****************************************************
+
+       01 RETURN-LINE-1.
+          05 RL1-DATE.
+             10 RL1-MONTH              PIC 99.
+             10                        PIC X VALUE '/'.
+             10 RL1-DAY                PIC 99.
+             10                        PIC X VALUE '/'.
+             10 RL1-YEAR               PIC 9(4).
+          05                           PIC X(65) VALUE SPACES.
+          05 RL1-CUST-NUM              PIC X(5).
+
+       01 RETURN-LINE-2.
+          05 RL2-CUST-NAME             PIC X(25).
+
+       01 RETURN-LINE-3.
+          05 RL3-CUST-ADDRESS          PIC X(18).
+
+       01 RETURN-LINE-4.
+          05 RL4-CITY                  PIC X(10).
+          05                           PIC XX VALUE ', '.
+          05 RL4-STATE                 PIC XX.
+          05                           PIC X VALUE SPACE.
+          05 RL4-ZIP.
+             10 RL4-ZIP-FRONT          PIC 9(5).
+             10                        PIC X VALUE '-'.
+             10 RL4-ZIP-BACK           PIC 9(4).
+          05                           PIC X(45) VALUE SPACES.
+          05 RL4-TOTAL-DUE             PIC $ZZ,ZZ9.99
+
+       01 RETURN-LINE-5.
+          05                           PIC X(NN) VALUE SPACES.
+          05 RL4-DUE-DATE.
+             10 RL5-D-MONTH            PIC 99.
+             10                        PIC X VALUE '/'.
+             10 RL5-D-DAY              PIC 99.
+             10                        PIC X VALUE '/'.
+             10 RL5-D-YEAR             PIC 9(4).
+
+       01 RECEIPT-LINE-1.
+          05                           PIC X(30) VALUE SPACES.
+          05 RCL1-CUST-NAME            PIC X(25).
+
+       01 RECEIPT-LINE-2.
+          05                           PIC X(30) VALUE SPACES.
+          05 RCL2-CUST-ADD             PIC X(18).
+
+       01 RECEIPT-LINE-3.
+          05                           PIC X(30) VALUE SPACES.
+          05 RCL3-CITY                 PIC X(10).
+          05                           PIC XX VALUE ', '.
+          05 RCL3-STATE                PIC XX.
+          05                           PIC X VALUE SPACE.
+          05 RCL3-ZIP.
+             10 RCL3-ZIP-FRONT         PIC 9(5).
+             10                        PIC X VALUE '-'.
+             10 RCL3-ZIP-BACK          PIC 9(4).
+
+       01 RECEIPT-DETAIL-LINE.
+          05 RDL-ITEM-NUM              PIC X(6).
+          05                           PIC XXX VALUE SPACES.
+          05 RDL-DESC                  PIC X(30).
+          05                           PIC XXX VALUE SPACES.
+          05 RDL-RETAIL                PIC Z,ZZ9.99.
+          05                           PIC XXX VALUE SPACES.
+          05 RDL-QTY                   PIC ZZ9.
+          05                           PIC XXX VALUE SPACES.
+          05 RDL-ITEM-WEIGHT           PIC ZZ9.
+          05                           PIC XXX VALUE SPACES.
+          05 RDL-TOTAL-WEIGHT          PIC ZZ9.
+          05                           PIC XX VALUE SPACES.
+          05 RDL-ITEM-TOTAL            PIC Z,ZZ9.99.
+
+       01 RECIEPT-SUB-TOTAL.
+          05                           PIC X(60) VALUE SPACES.
+          05 RST-WEIGHT-TOTAL          PIC ZZZ9.
+          05                           PIC X(5) VALUE SPACES.
+          05 RST-SUB-PRICE             PIC ZZ,ZZ9.99.
+
+       01 RECIEPT-SHIP.
+          05                           PIC X(73) VALUE SPACES.
+          05 RS-SHIP                   PIC Z9.99.
+
+       01 RECIEPT-TAX.
+          05                           PIC X(72) VALUE SPACES.
+          05 RT-TAX                    PIC ZZ9.99.
+
+       01 RECEIPT-TOTAL.
+          05                           PIC X(68) VALUE SPACES.
+          05 RTOT-TOTAL                PIC $ZZ,ZZ9.99.
+      **********************************************************
+      * THE FOLLOWING CODE IS FOR THE SUMMARY REPORT
+      **********************************************************
+
+       01 TSO-ID                       PIC X(7) VALUE 'XSCS119'.
+
+       01 HEADING-LINE-1.
+          05 HL1-MONTH                 PIC X(9).
+          05                           PIC X VALUE SPACE.
+          05 HL1-DAY                   PIC Z9.
+          05                           PIC XX VALUE ', '.
+          05 HL1-YEAR                  PIC 9(4).
+          05                           PIC X(36) VALUE SPACES.
+          05         PIC X(31) VALUE 'WALLY''S INSANE OFFICE INVENTORY'.
+          05                           PIC X(36) VALUE SPACES.
+          05                           PIC X(6) VALUE 'PAGE: '.
+          05 HL1-PAGE                  PIC ZZ9.
+
+       01 HEADING-LINE-2.
+          05 HL2-HOUR                  PIC Z9.
+          05                           PIC X VALUE ':'.
+          05 HL2-MINUTE                PIC 99.
+          05                           PIC X VALUE SPACE.
+          05 HL2-TIME-OF-DAY           PIC X.
+          05                           PIC X VALUE 'M'.
+
+       01 HEADING-LINE-3.
+          05                           PIC X(14) VALUE SPACES.
+          05                           PIC X(8) VALUE 'CUSTOMER'.
+          05                           PIC X(21) VALUE SPACES.
+          05                           PIC X(8) VALUE 'CUSTOMER'.
+          05                           PIC X(29) VALUE SPACES.
+          05                           PIC X(8) VALUE 'CUSTOMER'.
+          05                           PIC X(20) VALUE SPACES.
+          05                           PIC X(8) VALUE 'CUSTOMER'.
+
+       01 HEADING-LINE-4.
+          05                           PIC X(4) VALUE SPACES.
+          05                           PIC X(6) VALUE 'NUMBER'.
+          05                           PIC X(14) VALUE SPACES.
+          05                           PIC X(4) VALUE 'NAME'.
+          05                           PIC X(36) VALUE SPACES.
+          05                           PIC X(7) VALUE 'ADDRESS'.
+          05                           PIC X(24) VALUE SPACES.
+          05                           PIC X(8) VALUE 'SHIPPING'.
+          05                           PIC X(4) VALUE SPACES.
+          05                           PIC X(3) VALUE 'TAX'.
+          05                           PIC X(10) VALUE SPACES.
+          05                           PIC X(5) VALUE 'TOTAL'.
+
+       01 HEADING-UNDER-LINE.
+          05                           PIC X(14) VALUE SPACES.
+          05                           PIC X(8) VALUE ALL '_'.
+          05                           PIC X(13) VALUE SPACES.
+          05                           PIC X(25) VALUE ALL '_'.
+          05                           PIC X(14) VALUE SPACES.
+          05                           PIC X(18) VALUE ALL '_'.
+          05                           PIC X(15) VALUE SPACES.
+          05                           PIC X(9) VALUE ALL '_'.
+
+       01 DETAIL-LINE.
+          05                           PIC X(5) VALUE SPACES.
+          05 DL-CUST-NUM               PIC X(5).
+          05                           PIC X(5) VALUE SPACES.
+          05 DL-CUST-NAME              PIC X(25).
+          05                           PIC X(6) VALUE SPACES.
+          05 DL-CUST-FULL-ADDRESS.
+             10 DL-CUST-ADDRESS        PIC X(18).
+             10                        PIC X VALUE SPACE.
+             10 DL-CUST-CITY           PIC X(10).
+             10                        PIC XX VALUE ', '.
+             10 DL-CUST-STATE          PIC XX.
+             10                        PIC X VALUE SPACE.
+             10 DL-CUST-ZIP.
+                15 DL-ZIP-FRONT        PIC X(5).
+                15                     PIC X VALUE '-'.
+                15 DL-ZIP-BACK         PIC X(4).
+          05                           PIC X(6) VALUE SPACES.
+          05 DL-SHIP                   PIC Z9.99.
+          05                           PIC X(5) VALUE SPACES.
+          05 DL-TAX                    PIC ZZ9.99.
+          05                           PIC X(6) VALUE SPACES.
+          05 DL-CUST-TOTAL             PIC ZZ,ZZ9.99.
+
+       01 TOTAL-LINE-1.
+          05                     PIC X(53) VALUE SPACES.
+          05                     PIC X(20) VALUE 'TOTAL INVOICES SENT:'.
+          05                     PIC X(9) VALUE SPACES.
+          05 TL1-INVOICE-TOTAL   PIC ZZ9.
+
+       01 TOTAL-LINE-2.
+          05              PIC X(47) VALUE SPACES.
+          05              PIC X(27) VALUE 'ACCUMULATED INVOICE TOTAL: '.
+          05 TL2-TOTAL    PIC $$$$,$$9.99.
+
+
+       PROCEDURE DIVISION.
+      *******************************************
+      *  MAIN PROCESSING MODULE.
+      *   - HOUSEKEEPING PERFORMED
+      *   - PRETEST LOOP IS PERFORMED UNTIL ALL RECORDS ARE READ
+      *     - FOR EACH RECORD READ, 110 PROCESS IS PERFORMED
+      *   - END OF JOB PERFORMED
+      *******************************************
+
+       000-MAIN-MODULE.
+
+           PERFORM 100-HOUSEKEEPING.
+
+           PERFORM UNTIL MORE-RECORDS = 'NO '
+             READ COBOL-CLASS-IN
+               AT END
+                 MOVE 'NO ' TO MORE-RECORDS
+               NOT AT END
+                 PERFORM 110-PROCESS
+             END-READ
+           END-PERFORM.
+
+           PERFORM 120-END-OF-JOB.
+
+           STOP RUN.
+
+      *******************************************
+      *  HOUSEKEEPING MODULE.
+      *  - FILES OPENED FOR PROCESSING
+      *******************************************
+
+       100-HOUSEKEEPING.
+
+           OPEN INPUT MASTER-FILE
+                      INVENT-IN
+                OUTPUT TRANS-OUT
+                       SUMMARY-REPORT
+                       INVOICE-REPORT.
+
+      ********************************************
+      * -CHECK FILE STATUS
+      ********************************************
+
+           IF WS-MAST-STATUS NOT = '00'
+              MOVE 'NO' TO WS-MORE-RECORDS
+              DISPLAY '************************************'
+              DISPLAY '  100-HOUSEKEEPING'
+              DISPLAY '  ERROR IN OPENING MASTER FILE'
+              DISPLAY '  FILE STATUS IS ' WS-MAST-STATUS
+              DISPLAY '************************************'
+           END-IF
+
+           IF WS-INVENT-STATUS NOT = '00'
+              MOVE 'NO' TO WS-MORE-RECORDS
+              DISPLAY '************************************'
+              DISPLAY '  100-HOUSEKEEPING'
+              DISPLAY '  ERROR IN OPENING INVENTORY FILE'
+              DISPLAY '  FILE STATUS IS ' WS-INVENT-STATUS
+              DISPLAY '************************************'
+           END-IF
+
+           IF WS-TRANS-STATUS NOT = '00'
+              MOVE 'NO' TO WS-MORE-RECORDS
+              DISPLAY '************************************'
+              DISPLAY '  100-HOUSEKEEPING'
+              DISPLAY '  ERROR IN OPENING TRANSACTION FILE'
+              DISPLAY '  FILE STATUS IS ' WS-TRANS-STATUS
+              DISPLAY '************************************'
+           END-IF
+
+           MOVE FUNCTION CURRENT-DATE TO CURRENT-DATE-AND-TIME
+           MOVE MONTH(CD-MONTH) TO HL1-MONTH
+           MOVE CD-MONTH TO RL1-MONTH
+                            WS-MONTH
+           MOVE CD-DAY TO HL1-DAY
+                          RL1-DAY
+                          WS-DAY
+           MOVE CD-YEAR TO HL1-YEAR
+                           RL1-YEAR
+                           WS-YEAR
+
+           IF CD-HOUR > 12
+              COMPUTE HL2-HOUR = CD-HOUR - 12
+           ELSE
+              IF CD-HOUR = 0
+                 MOVE 12 TO HL2-HOUR
+              ELSE
+                 MOVE CD-HOUR TO HL2-HOUR
+              END-IF
+           END-IF
+
+           IF CD-HOUR < 12
+              MOVE 'A' TO HL2-TIME-OF-DAY
+           ELSE
+              MOVE 'P' TO HL2-TIME-OF-DAY
+           END-IF
+
+           MOVE CD-MINUTE TO HL2-MINUTE
+
+           COMPUTE WS-DATE-INTEGER =
+              FUNCTION INTEGER-OF-DATE (WS-DATE-R)
+           ADD 14 TO WS-DATE-INTEGER
+           COMPUTE WS-DUE-DATE =
+              FUNCTION DATE-OF-INTEGER (WS-DATE-INTEGER)
+           MOVE WS-D-MONTH TO RL3-D-MONTH
+                              RCL4-D-MONTH
+           MOVE WS-D-DAY TO RL3-D-DAY
+                            RCL4-D-DAY
+           MOVE WS-D-YEAR TO RL3-D-YEAR
+                             RCL4-D-YEAR
+
+      *******************************************
+      *  DETAIL PROCESS MODULE.
+      *  - AN EXPLAINATION OF THE PROCESSING FOR EACH
+      *    RECORD BELONGS HERE
+      *******************************************
+
+       110-PROCESS.
+          IF WS-LINE-CNT > 48
+             PERFORM 200-HEADINGS
+          END-IF
+
+          MOVE MI-CUST-ID TO TC-CUST-ID
+                             RL1-CUST-ID
+                             DL-CUST-ID
+
+          MOVE MI-CUST-NAME TO TC-CUST-NAME
+                               RL2-CUST-NAME
+                               RCL1-CUST-NAME
+                               DL-CUST-NAME
+
+          MOVE MI-CUST-ADD TO TC-CUST-ADD
+                              RL3-CUST-ADD
+                              RCL2-CUST-ADD
+      *                       DL-CUST-ADD
+
+          MOVE MI-CITY TO TC-CITY
+                          RL4-CITY
+                          RCL3-CITY
+
+          MOVE MI-ZIP(1:5) TO TC-ZIP-FRONT
+                              RL4-ZIP-FRONT
+                              RCL3-ZIP-FRONT
+
+          MOVE MI-ZIP(6:) TO TC-ZIP-BACK
+                             RL4-ZIP-BACK
+                             RCL3-ZIP-BACK
+
+          PERFORM 210-WRITE-INVOICE
+
+          MOVE DETAIL-LINE TO S-PRINT-REC
+          WRITE S-PRINT-REC
+            AFTER WS-LINES
+
+          ADD WS-TOTAL TO WS-GRAND-TOTAL.
+
+      *******************************************
+      *  END OF JOB MODULE.
+      *  - FILES CLOSED
+      *******************************************
+
+       120-END-OF-JOB.
+
+           DISPLAY ' NUMBER OF RECORDS PROCESSED = ' WS-REC-COUNT
+           CLOSE COBOL-CLASS-IN
+                 COBOL-CLASS-OUT.
+       200-HEADINGS.
+
+       210-WRITE-INVOICE.
+
+      *   PRINT ALL LINES PRIOR TO INVOICE DETAIL LINES
+      *************************************************
+          PERFORM VARYING WS-COUNTER FROM 1 BY 1
+              UNTIL WS-COUNTER > MI-NUM-ITEMS
+      *          CALCULATE ITEM TOTAL WEIGHT
+      *          CALCULATE ITEM TOTAL COST
+      *          PRINT DETAIL LINE
+      *          CALCULATE SUBTOTAL
+                 ADD WS-ITEM-COST TO WS-SUB-TOTAL.
+          END-PERFORM
+      *   CALCULATE TAXES
+          CALCULATE WS-TAX = WS-SUB-TOTAL * SP-TAX(MI-ZONE)
+      *   CALCULATE SHIPPING
+          SET CHARGE-X, WEIGHT-X TO 1
+              SEARCH WEIGHT-INFO VARYING CHARGE-X, WEIGHT-X
+                AT END
+                   MOVE SP-SHIP-CHARGE(MI-ZONE, 7) TO RCL-SHIP
+                                                      DL-SHIP
+                                                      WS-SHIP
+                WHEN MI-TOT-WEIGHT < WT-WEIGHT(WEIGHT-X)
+                   MOVE SP-SHIP-CHARGE(MI-ZONE, WEIGHT-X) TO RCL-SHIP
+                                                             DL-SHIP
+                                                             WS-SHIP
+              END-SEARCH
+          CALCULATE WS-TOTAL = WS-SUB-TOTAL + WS-SHIP + WS-TAX
+          MOVE WS-TOTAL TO DL-TOTAL
+                           RCL-TOTAL
+
+      * PRINT ALL TOTAL LINES.
+
+

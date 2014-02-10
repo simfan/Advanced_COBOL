@@ -1,0 +1,819 @@
+       IDENTIFICATION DIVISION.
+
+       PROGRAM-ID. CBL06.
+       AUTHOR.  CHRIS GLOCK.
+       DATE-WRITTEN. 10/02/06.
+       DATE-COMPILED.
+      ******************************************************************
+      * PURPOSE:  THIS PROGRAM ,USING THE FILES SCM.ATHLETE.TRANS.ESDS,
+      * XSCS119.ATHLETE.MSTR.KSDS, AND SCM.COACH.MSTR.KSDSWILL CREATE A
+      * REPORT DISPLAYING THE TRACK ATHLETES AND LIST THE EVENTS THEY
+      * PARTICIPATE IN ALONG WITH THE TIMES FOR EACH EVENT.
+      ******************************************************************
+
+       ENVIRONMENT DIVISION.
+
+       INPUT-OUTPUT SECTION.
+
+       FILE-CONTROL.
+
+           SELECT ATHLETE-MASTER-IO
+               ASSIGN TO MASTFILE
+               ORGANIZATION IS INDEXED
+               ACCESS IS RANDOM
+               RECORD KEY MAST-ATHLETE-NO
+               FILE STATUS IS WS-MAST-ATHLETE-STATUS.
+
+           SELECT COACH-MASTER-IN
+               ASSIGN TO COACHFLE
+               ORGANIZATION IS INDEXED
+               ACCESS IS RANDOM
+               RECORD KEY MAST-COACH-NO
+               FILE STATUS IS WS-MAST-COACH-STATUS.
+
+           SELECT ATHLETE-TRANS-IN
+               ASSIGN TO AS-TRANFILE
+               FILE STATUS IS WS-TRANS-STATUS.
+
+           SELECT ATHLETE-REPORT
+               ASSIGN TO AREPORT.
+
+       DATA DIVISION.
+
+
+       FILE SECTION.
+
+       FD   ATHLETE-MASTER-IO
+            RECORD CONTAINS 39 TO 111 CHARACTERS.
+
+       01   ATHLETE-REC-IO.
+            05 MAST-ATHLETE-NO.
+               10 MAST-SCHOOL-ID       PIC X(3).
+               10 MAST-ATHLETE-ID      PIC X(3).
+            05 MAST-ATHLETE-NAME       PIC X(20).
+            05 MAST-COACH-NUM          PIC X(3).
+            05 MAST-NUM-OF-EVENTS      PIC 99.
+            05 MAST-EVENT OCCURS 1 TO 10 TIMES
+               DEPENDING ON MAST-NUM-OF-EVENTS.
+               10 MAST-EVENT-CODE    PIC X(4).
+               10 MAST-EVENT-TIME    PIC 9(4).
+
+       FD   COACH-MASTER-IN
+            RECORD CONTAINS 28 CHARACTERS.
+
+       01   COACH-REC-IN.
+            05 MAST-COACH-NO        PIC X(3).
+            05 MAST-COACH-F-NAME    PIC X(10).
+            05 MAST-COACH-L-NAME    PIC X(15).
+
+       FD  ATHLETE-TRANS-IN
+           RECORD CONTAINS 32 TO 112 CHARACTERS.
+
+       01  TRANS-RECORD.
+           05 TRANS-SCHOOL-ID       PIC X(3).
+           05 TRANS-ATHLETE-ID      PIC X(3).
+           05 TRANS-ATHLETE-NAME    PIC X(20).
+           05 TRANS-COACH-NUM       PIC X(3).
+           05 TRANS-NO-OF-EVENTS    PIC 99.
+           05 TRANS-CODE            PIC X.
+              88 ADD-RECORD         VALUE 'A'.
+              88 CHANGE-RECORD      VALUE 'C'.
+              88 DELETE-RECORD      VALUE 'D'.
+           05 TRANS-EVENT OCCURS 0 TO 10 TIMES
+              DEPENDING ON TRANS-NO-OF-EVENTS.
+              10 TRANS-EVENT-CODE PIC X(4).
+              10 TRANS-EVENT-TIME PIC 9(4).
+
+       FD  ATHLETE-REPORT
+           RECORD CONTAINS 132 CHARACTERS.
+
+       01  PRINT-REC               PIC X(132).
+
+       WORKING-STORAGE SECTION.
+
+       01  WORK-FIELDS.
+           05 MORE-RECORDS             PIC XXX VALUE 'YES'.
+              88 EOF VALUE 'NO'.
+           05 WS-COUNTER               PIC 99.
+           05 WS-BLANK-COUNTER         PIC 99.
+           05 WS-MAST-ATHLETE-STATUS   PIC XX.
+           05 WS-MAST-COACH-STATUS     PIC XX.
+           05 WS-TRANS-STATUS          PIC XX.
+           05 WS-PAGE-CNT              PIC 999.
+           05 WS-LINE-CNT              PIC 99 VALUE 60.
+           05 WS-LINES                 PIC 9.
+
+       01  TOTALS.
+           05 TOT-VALID-ADDS           PIC 999.
+           05 TOT-VALID-CHANGES        PIC 999.
+           05 TOT-VALID-DELETES        PIC 999.
+           05 TOT-INVALID-ADDS         PIC 999.
+           05 TOT-INVALID-CHANGES      PIC 999.
+           05 TOT-INVALID-DELETES      PIC 999.
+           05 TOT-RECORDS-READ         PIC 9(4).
+
+       01  CURRENT-DATE-AND-TIME.
+           05 CD-YEAR                  PIC 9(4).
+           05 CD-MONTH                 PIC 99.
+           05 CD-DAY                   PIC 99.
+           05 CD-HOUR                  PIC 99.
+           05 CD-MINUTE                PIC 99.
+
+       01  CIVILIAN-HOUR               PIC 99.
+
+       01  MONTHS.
+           05                          PIC X(9) VALUE 'JANUARY'.
+           05                          PIC X(9) VALUE 'FEBRUARY'.
+           05                          PIC X(9) VALUE 'MARCH'.
+           05                          PIC X(9) VALUE 'APRIL'.
+           05                          PIC X(9) VALUE 'MAY'.
+           05                          PIC X(9) VALUE 'JUNE'.
+           05                          PIC X(9) VALUE 'JULY'.
+           05                          PIC X(9) VALUE 'AUGUST'.
+           05                          PIC X(9) VALUE 'SEPTEMBER'.
+           05                          PIC X(9) VALUE 'OCTOBER'.
+           05                          PIC X(9) VALUE 'NOVEMBER'.
+           05                          PIC X(9) VALUE 'DECEMBER'.
+
+       01  MONTH-VALUE REDEFINES MONTHS.
+           05 MONTH-NAME OCCURS 12 TIMES PIC X(9).
+
+       01  TSO-ID                      PIC X(7) VALUE 'XSCS119'.
+
+       01  HEADING-LINE-1.
+           05                          PIC X(6) VALUE 'DATE: '.
+           05 HL1-MONTH                PIC X(9).
+           05                          PIC X VALUE SPACE.
+           05 HL1-DAY                  PIC Z9.
+           05                          PIC XX VALUE ', '.
+           05 HL1-YEAR                 PIC 9(4).
+           05                          PIC X(32) VALUE SPACES.
+           05                          PIC X(11) VALUE 'NEW HUSKERS'.
+           05                          PIC X(56) VALUE SPACES.
+           05                          PIC X(6) VALUE 'PAGE: '.
+           05 HL1-PAGE                 PIC ZZ9.
+
+       01  HEADING-LINE-2.
+           05                          PIC X(6) VALUE 'TIME: '.
+           05 HL2-HOUR                 PIC Z9.
+           05                          PIC X VALUE ':'.
+           05 HL2-MINUTE               PIC 99.
+           05                          PIC X VALUE SPACE.
+           05 HL2-TIME-OF-DAY          PIC X.
+           05                          PIC X VALUE 'M'.
+           05                          PIC X(39) VALUE SPACES.
+           05                          PIC X(10) VALUE 'TRACK  AND'.
+           05                          PIC X(7) VALUE '  FIELD'.
+
+       01  HEADING-LINE-3.
+           05                          PIC X(2) VALUE SPACES.
+           05                          PIC X(8) VALUE 'ATHLETE '.
+           05                          PIC X(6) VALUE 'RECORD'.
+           05                          PIC X(51) VALUE SPACES.
+           05                          PIC X(6) VALUE 'NUM OF'.
+
+       01  HEADING-LINE-4.
+           05                          PIC X(4) VALUE SPACES.
+           05                          PIC X(6) VALUE 'KEY   '.
+           05                          PIC X(6) VALUE 'ACTION'.
+           05                          PIC X(5) VALUE SPACES.
+           05                          PIC X(8) VALUE 'ATHLETE '.
+           05                          PIC X(4) VALUE 'NAME'.
+           05                          PIC X(15) VALUE SPACES.
+           05                          PIC X(10) VALUE 'COACH NAME'.
+           05                          PIC X(9) VALUE SPACES.
+           05                          PIC X(7) VALUE 'EVENTS '.
+           05 HL4-EVENTS-AND-TIMES OCCURS 5 TIMES.
+              10                       PIC X(6) VALUE 'EVENT '.
+              10                       PIC X(4) VALUE 'TIME'.
+              10                       PIC X(2) VALUE SPACES.
+
+       01  HEADING-UNDER-LINE.
+           05                          PIC X(2) VALUE SPACES.
+           05                          PIC X(7) VALUE ALL '_'.
+           05                          PIC X VALUE SPACES.
+           05                          PIC X(6) VALUE ALL '_'.
+           05                          PIC X VALUE SPACES.
+           05                          PIC X(20) VALUE ALL '_'.
+           05                          PIC XXX VALUE SPACES.
+           05                          PIC X(26) VALUE ALL '_'.
+           05                          PIC X VALUE SPACES.
+           05                          PIC X(6) VALUE ALL '_'.
+           05                          PIC X VALUE SPACE.
+           05 HLU-EVENTS OCCURS 5 TIMES.
+              10                       PIC X(5) VALUE ALL '_'.
+              10                       PIC X VALUE SPACE.
+              10                       PIC X(4) VALUE ALL '_'.
+              10                       PIC XX VALUE SPACE.
+
+       01  DETAIL-LINE-1.
+           05                          PIC XX VALUE SPACES.
+           05 DL1-ATHLETE-KEY          PIC X(6).
+           05                          PIC X(4) VALUE SPACES.
+           05 DL1-VALID-CODE           PIC X.
+              88 VALID-REC VALUE 'V', ' '.
+              88 INVALID-REC VALUE 'I'.
+           05 DL1-ACTION-CODE          PIC X.
+           05                          PIC XXX VALUE SPACES.
+           05 DL1-ATHLETE-NAME         PIC X(20).
+           05                          PIC XXX VALUE SPACES.
+           05 DL1-COACH-FIRST-NAME     PIC X(10).
+           05                          PIC X VALUE SPACE.
+           05 DL1-COACH-LAST-NAME      PIC X(15).
+           05                          PIC XXX VALUE SPACES.
+           05 DL1-NUM-OF-EVENTS        PIC Z9 BLANK WHEN ZERO.
+           05                          PIC X(4) VALUE SPACES.
+           05 DL1-EVENTS OCCURS 5 TIMES.
+             10 DL1-EVENT              PIC X(4).
+             10                        PIC X VALUE SPACE.
+             10 DL1-TIME               PIC 9(4) BLANK WHEN ZERO.
+             10                        PIC X(3) VALUE SPACES.
+
+       01  DETAIL-LINE-2.
+           05                          PIC X(75) VALUE SPACES.
+           05 DL2-EVENTS OCCURS 5 TIMES.
+              10 DL2-EVENT             PIC X(4).
+              10                       PIC X VALUE SPACE.
+              10 DL2-TIME              PIC 9(4) BLANK WHEN ZERO.
+              10                       PIC X(3) VALUE SPACES.
+
+       01  TOTAL-LINE-1.
+           05                        PIC X(52) VALUE SPACES.
+           05                        PIC X(10) VALUE '*** FINAL '.
+           05                        PIC X(7) VALUE 'TOTALS:'.
+
+       01  TOTAL-LINE-2.
+           05                        PIC X(60) VALUE SPACES.
+           05                        PIC X(12) VALUE 'VALID ADDS: '.
+           05                        PIC XX VALUE SPACE.
+           05 TL2-VALID-ADDS         PIC ZZ9.
+
+       01  TOTAL-LINE-3.
+           05                        PIC X(57) VALUE SPACES.
+           05                        PIC X(15) VALUE 'VALID CHANGES: '.
+           05                        PIC XX VALUE SPACE.
+           05 TL3-VALID-CHANGES      PIC ZZ9.
+
+       01  TOTAL-LINE-4.
+           05                        PIC X(57) VALUE SPACES.
+           05                        PIC X(15) VALUE 'VALID DELETES: '.
+           05                        PIC XX VALUE SPACE.
+           05 TL4-VALID-DELETES      PIC ZZ9.
+
+       01  TOTAL-LINE-5.
+           05                      PIC X(58) VALUE SPACES.
+           05                      PIC X(14) VALUE 'INVALID ADDS: '.
+           05                      PIC XX VALUE SPACE.
+           05 TL5-INVALID-ADDS     PIC ZZ9.
+
+       01  TOTAL-LINE-6.
+           05                      PIC X(55) VALUE SPACES.
+           05                      PIC X(17) VALUE 'INVALID CHANGES: '.
+           05                      PIC XX VALUE SPACE.
+           05 TL6-INVALID-CHANGES  PIC ZZ9.
+
+       01  TOTAL-LINE-7.
+           05                      PIC X(55) VALUE SPACES.
+           05                      PIC X(17) VALUE 'INVALID DELETES: '.
+           05                      PIC XX VALUE SPACE.
+           05 TL7-INVALID-DELETES  PIC ZZ9.
+
+       01  TOTAL-LINE-8.
+           05                      PIC X(52) VALUE SPACES.
+           05                      PIC X(14) VALUE 'TOTAL RECORDS '.
+           05                      PIC X(6) VALUE 'READ: '.
+           05 TL8-RECORDS-READ     PIC Z,ZZ9.
+
+       PROCEDURE DIVISION.
+      *******************************************
+      *  MAIN PROCESSING MODULE.
+      *   - HOUSEKEEPING PERFORMED
+      *   - PRETEST LOOP IS PERFORMED UNTIL ALL RECORDS ARE READ
+      *     - FOR EACH RECORD READ, 110 PROCESS IS PERFORMED
+      *   - END OF JOB PERFORMED
+      *******************************************
+
+       000-MAIN-MODULE.
+
+           PERFORM 100-HOUSEKEEPING.
+
+           PERFORM UNTIL EOF
+             READ ATHLETE-TRANS-IN
+               IF WS-TRANS-STATUS = '10'
+                  MOVE 'NO' TO MORE-RECORDS
+               ELSE
+                  IF WS-TRANS-STATUS = '00'
+                     PERFORM 110-PROCESS
+                  ELSE
+                     MOVE 'NO' TO MORE-RECORDS
+                     DISPLAY '*********************************'
+                     DISPLAY ' 000-MAIN-MODULE'
+                     DISPLAY ' ERROR IN READING THE TRANS FILE'
+                     DISPLAY ' FILE STATUS IS  ', WS-TRANS-STATUS
+                     DISPLAY '*********************************'
+                  END-IF
+               END-IF
+           END-PERFORM
+
+
+           PERFORM 120-END-OF-JOB.
+
+           STOP RUN.
+
+      *******************************************
+      *  HOUSEKEEPING MODULE.
+      *  - FILES OPENED FOR PROCESSING
+      *  - DATE MOVED TO HEADING
+      *******************************************
+
+       100-HOUSEKEEPING.
+
+           OPEN INPUT ATHLETE-TRANS-IN
+                      COACH-MASTER-IN
+                OUTPUT ATHLETE-REPORT
+                I-O ATHLETE-MASTER-IO.
+
+           IF WS-MAST-ATHLETE-STATUS NOT = '00'
+              MOVE 'NO' TO MORE-RECORDS
+              DISPLAY '*********************************'
+              DISPLAY ' 100-HOUSEKEEPING'
+              DISPLAY ' ERROR IN OPENING THE MASTER FILE'
+              DISPLAY ' FILE STATUS IS  ', WS-MAST-ATHLETE-STATUS
+              DISPLAY '*********************************'
+           END-IF
+
+           IF WS-MAST-COACH-STATUS NOT = '00'
+              MOVE 'NO' TO MORE-RECORDS
+              DISPLAY '*********************************'
+              DISPLAY ' 100-HOUSEKEEPING'
+              DISPLAY ' ERROR IN OPENING THE MASTER FILE'
+              DISPLAY ' FILE STATUS IS  ', WS-MAST-COACH-STATUS
+              DISPLAY '*********************************'
+           END-IF
+
+           IF WS-TRANS-STATUS NOT = '00'
+              MOVE 'NO' TO MORE-RECORDS
+              DISPLAY '********************************'
+              DISPLAY ' 100-HOUSEKEEPING'
+              DISPLAY ' ERROR IN OPENING THE TRANS FILE'
+              DISPLAY ' FILE STATUS IS  ', WS-TRANS-STATUS
+              DISPLAY '********************************'
+           END-IF
+
+           MOVE FUNCTION CURRENT-DATE TO CURRENT-DATE-AND-TIME
+           MOVE MONTH-NAME(CD-MONTH) TO HL1-MONTH
+           MOVE CD-DAY TO HL1-DAY
+           MOVE CD-YEAR TO HL1-YEAR
+
+           IF CD-HOUR < 12
+              IF CD-HOUR = 0
+                 MOVE 12 TO HL2-HOUR
+              ELSE
+                 MOVE CD-HOUR TO HL2-HOUR
+              END-IF
+              MOVE 'A' TO HL2-TIME-OF-DAY
+           ELSE
+              IF CD-HOUR > 12
+                 COMPUTE CIVILIAN-HOUR = CD-HOUR - 12
+                 MOVE CIVILIAN-HOUR TO HL2-HOUR
+              ELSE
+                 MOVE 12 TO HL2-HOUR
+              END-IF
+              MOVE 'P' TO HL2-TIME-OF-DAY
+           END-IF
+           MOVE CD-MINUTE TO HL2-MINUTE.
+      *******************************************
+      *  DETAIL PROCESS MODULE.
+      *  - AN EXPLAINATION OF THE PROCESSING FOR EACH
+      *    RECORD BELONGS HERE
+      *******************************************
+
+       110-PROCESS.
+           MOVE TRANS-SCHOOL-ID TO MAST-SCHOOL-ID
+           MOVE TRANS-ATHLETE-ID TO MAST-ATHLETE-ID
+
+           IF ADD-RECORD
+              PERFORM 200-ADD-RTN
+           ELSE
+              IF CHANGE-RECORD
+                 PERFORM 210-CHANGE-RTN
+              ELSE
+                 PERFORM 220-DELETE-RTN
+              END-IF
+           END-IF
+           ADD 1 TO TOT-RECORDS-READ.
+
+      *******************************************
+      *  END OF JOB MODULE.
+      *  - TOTAL LINES WRITTEN
+      *  - FILES CLOSED
+      *******************************************
+
+       120-END-OF-JOB.
+
+      *WRITE TOTAL LINES
+
+           MOVE TOTAL-LINE-1 TO PRINT-REC
+           WRITE PRINT-REC
+              AFTER 3
+
+           MOVE TOT-VALID-ADDS TO TL2-VALID-ADDS
+           MOVE TOTAL-LINE-2 TO PRINT-REC
+           WRITE PRINT-REC
+              AFTER 2
+
+           MOVE TOT-VALID-CHANGES TO TL3-VALID-CHANGES
+           MOVE TOTAL-LINE-3 TO PRINT-REC
+           WRITE PRINT-REC
+
+           MOVE TOT-VALID-DELETES TO TL4-VALID-DELETES
+           MOVE TOTAL-LINE-4 TO PRINT-REC
+           WRITE PRINT-REC
+
+           MOVE TOT-INVALID-ADDS TO TL5-INVALID-ADDS
+           MOVE TOTAL-LINE-5 TO PRINT-REC
+           WRITE PRINT-REC
+              AFTER 2
+
+           MOVE TOT-INVALID-CHANGES TO TL6-INVALID-CHANGES
+           MOVE TOTAL-LINE-6 TO PRINT-REC
+           WRITE PRINT-REC
+
+           MOVE TOT-INVALID-DELETES TO TL7-INVALID-DELETES
+           MOVE TOTAL-LINE-7 TO PRINT-REC
+           WRITE PRINT-REC
+
+           MOVE TOT-RECORDS-READ TO TL8-RECORDS-READ
+           MOVE TOTAL-LINE-8 TO PRINT-REC
+           WRITE PRINT-REC
+              AFTER 2
+
+           CLOSE ATHLETE-MASTER-IO
+                 ATHLETE-TRANS-IN
+                 COACH-MASTER-IN
+
+           IF WS-MAST-ATHLETE-STATUS NOT = '00'
+              DISPLAY '**************************************'
+              DISPLAY ' 120-END-OF-JOB'
+              DISPLAY ' ERROR CLOSING THE MASTER ATHLETE FILE'
+              DISPLAY ' FILE STATUS IS  ' WS-MAST-ATHLETE-STATUS
+              DISPLAY '**************************************'
+           END-IF
+
+           IF WS-MAST-COACH-STATUS NOT = '00'
+              DISPLAY '**************************************'
+              DISPLAY ' 120-END-OF-JOB'
+              DISPLAY ' ERROR CLOSING THE MASTER COACH FILE'
+              DISPLAY ' FILE STATUS IS  ' WS-MAST-COACH-STATUS
+              DISPLAY '**************************************'
+           END-IF
+
+           IF WS-TRANS-STATUS NOT = '00'
+              DISPLAY '**************************************'
+              DISPLAY ' 120-END-OF-JOB'
+              DISPLAY ' ERROR CLOSING THE TRANSACTION FILE'
+              DISPLAY ' FILE STATUS IS  ' WS-TRANS-STATUS
+              DISPLAY '**************************************'
+           END-IF.
+
+      **************************************************
+      *  200-ADD-RTN
+      *  - CHECKS THE MASTER ATHLETE FILE FOR THE RECORD.
+      *    IF THE RECORD DOES NOT EXIST, THE SUBROUTINE
+      *    PERFORMS 310-ADD-RECORD OTHERWISE, IT WRITES
+      *    AN ERROR LINE.
+      **************************************************
+
+       200-ADD-RTN.
+
+           READ ATHLETE-MASTER-IO
+
+           IF WS-MAST-ATHLETE-STATUS = '00'
+              PERFORM 300-WRITE-ERROR
+           ELSE
+              IF WS-MAST-ATHLETE-STATUS = '23'
+                 MOVE 'V' TO DL1-VALID-CODE
+                 MOVE 'A' TO DL1-ACTION-CODE
+                 PERFORM 310-ADD-RECORD
+              ELSE
+                 MOVE 'NO' TO MORE-RECORDS
+                 DISPLAY '******************************'
+                 DISPLAY ' 200-ADD-RTN'
+                 DISPLAY ' ERROR READING THE MASTER FILE'
+                 DISPLAY ' FILE STATUS IS  ', WS-MAST-ATHLETE-STATUS
+                 DISPLAY '******************************'
+              END-IF
+           END-IF.
+
+      *********************************************************
+      *  210-CHANGE-RTN
+      *  -  CHECKS THE MASTER ATHLETE FILE FOR THE RECORD.  IF
+      *     THE RECORD EXISTS, THE SUBROUTINE PERFORMS
+      *     320-CHANGE-RECORD. OTHERWISE, IT WRITES AN ERROR
+      *     LINE.
+      *********************************************************
+
+         210-CHANGE-RTN.
+
+             READ ATHLETE-MASTER-IO
+
+             IF WS-MAST-ATHLETE-STATUS = '23'
+                PERFORM 300-WRITE-ERROR
+             ELSE
+                IF WS-MAST-ATHLETE-STATUS = '00'
+                   MOVE 'V' TO DL1-VALID-CODE
+                   MOVE 'C' TO DL1-ACTION-CODE
+                   PERFORM 320-CHANGE-RECORD
+                ELSE
+                   MOVE 'NO' TO MORE-RECORDS
+                   DISPLAY '**********************************'
+                   DISPLAY ' 210-CHANGE-RTN'
+                   DISPLAY ' ERROR IN READING THE MASTER FILE'
+                   DISPLAY ' FILE STATUS IS  ', WS-MAST-ATHLETE-STATUS
+                   DISPLAY '**********************************'
+                END-IF
+             END-IF.
+
+      ********************************************
+      *  220-DELETE-RTN
+      *  - CHECKS FOR THE RECORD.  IF THE RECORD
+      *    EXISTS, THE SUBROUTINE PERFORMS
+      *    330-DELETE-RECORD.  OTHERWISE, AN ERROR
+      *    LINE IS WRITTEN.
+      ********************************************
+
+         220-DELETE-RTN.
+
+             READ ATHLETE-MASTER-IO
+
+             IF WS-MAST-ATHLETE-STATUS = '23'
+                PERFORM 300-WRITE-ERROR
+             ELSE
+                IF WS-MAST-ATHLETE-STATUS = '00'
+                   MOVE 'V' TO DL1-VALID-CODE
+                   MOVE 'D' TO DL1-ACTION-CODE
+                   PERFORM 330-DELETE-RECORD
+                ELSE
+                   MOVE 'NO' TO MORE-RECORDS
+                   DISPLAY '**********************************'
+                   DISPLAY ' 220-DELETE RTN'
+                   DISPLAY ' ERROR IN READING THE MASTER FILE'
+                   DISPLAY ' FILE STATUS IS  ' WS-MAST-ATHLETE-STATUS
+                   DISPLAY '**********************************'
+                END-IF
+             END-IF.
+
+      *******************************************
+      *  300-WRITE-ERROR
+      *  MOVES AN ERROR LINE INTO THE DETAIL LINE
+      *******************************************
+
+         300-WRITE-ERROR.
+
+             MOVE 'I' TO DL1-VALID-CODE
+             MOVE TRANS-CODE TO DL1-ACTION-CODE
+             PERFORM 400-WRITE-LINE.
+
+      *******************************************
+      *  310-ADD-RECORD
+      *  - THIS SUBROUTINE WILL ADD A RECORD TO
+      *    THE MASTER FILE
+      *******************************************
+
+         310-ADD-RECORD.
+
+             MOVE TRANS-SCHOOL-ID TO MAST-SCHOOL-ID
+             MOVE TRANS-ATHLETE-NAME TO MAST-ATHLETE-NAME
+             MOVE TRANS-COACH-NUM TO MAST-COACH-NUM
+             PERFORM 410-SEARCH-COACH
+             MOVE TRANS-NO-OF-EVENTS TO MAST-NUM-OF-EVENTS
+             PERFORM VARYING WS-COUNTER FROM 1 BY 1
+               UNTIL WS-COUNTER > TRANS-NO-OF-EVENTS
+                 MOVE TRANS-EVENT(WS-COUNTER) TO MAST-EVENT(WS-COUNTER)
+             END-PERFORM
+             WRITE ATHLETE-REC-IO
+
+             IF WS-MAST-ATHLETE-STATUS NOT = '00'
+                MOVE 'NO' TO MORE-RECORDS
+                DISPLAY '********************************************'
+                DISPLAY ' 310-ADD-RECORD'
+                DISPLAY ' ERROR IN WRITING TO THE MASTER ATHLETE FILE'
+                DISPLAY ' FILE STATUS IS  ', WS-MAST-ATHLETE-STATUS
+                DISPLAY '********************************************'
+             END-IF
+
+             ADD 1 TO TOT-VALID-ADDS
+             PERFORM 400-WRITE-LINE.
+
+      *************************************************
+      *  320-CHANGE-RECORD
+      *  - CHANGES A RECORD
+      *************************************************
+
+         320-CHANGE-RECORD.
+
+             PERFORM 400-WRITE-LINE.
+
+             IF TRANS-ATHLETE-NAME > SPACES
+                MOVE TRANS-ATHLETE-NAME TO MAST-ATHLETE-NAME
+             END-IF
+
+             IF TRANS-COACH-NUM > SPACES
+                MOVE TRANS-COACH-NUM TO MAST-COACH-NUM
+             END-IF
+
+             IF TRANS-NO-OF-EVENTS > 0
+                MOVE TRANS-NO-OF-EVENTS TO MAST-NUM-OF-EVENTS
+             END-IF
+
+             PERFORM VARYING WS-COUNTER FROM 1 BY 1
+                UNTIL WS-COUNTER > MAST-NUM-OF-EVENTS
+                  IF TRANS-EVENT-CODE (WS-COUNTER) > SPACES
+                     MOVE TRANS-EVENT-CODE (WS-COUNTER)
+                          TO MAST-EVENT-CODE (WS-COUNTER)
+                  END-IF
+                  IF TRANS-EVENT-TIME (WS-COUNTER) > SPACES
+                     MOVE TRANS-EVENT-TIME (WS-COUNTER)
+                          TO MAST-EVENT-TIME (WS-COUNTER)
+                  END-IF
+             END-PERFORM
+
+             REWRITE ATHLETE-REC-IO
+
+             IF WS-MAST-ATHLETE-STATUS NOT = '00'
+                MOVE 'NO' TO MORE-RECORDS
+                DISPLAY '*********************************************'
+                DISPLAY ' 320-CHANGE-RECORD'
+                DISPLAY ' ERROR IN CHANGING RECORD IN MASTER FILE'
+                DISPLAY ' FILE STATUS IS  ' WS-MAST-ATHLETE-STATUS
+                DISPLAY '*********************************************'
+             END-IF
+
+             MOVE ' ' TO DL1-VALID-CODE
+                         DL1-ACTION-CODE
+
+             ADD 1 TO TOT-VALID-CHANGES
+             PERFORM 400-WRITE-LINE.
+
+      *******************************************
+      *  330-DELETE-RECORD
+      *  - DELETES THE RECORD
+      *******************************************
+
+         330-DELETE-RECORD.
+
+             PERFORM 400-WRITE-LINE.
+             DELETE ATHLETE-MASTER-IO RECORD
+
+             IF WS-MAST-ATHLETE-STATUS NOT = '00'
+                MOVE 'NO' TO MORE-RECORDS
+                DISPLAY '*********************************************'
+                DISPLAY ' 330-DELETE-RECORD'
+                DISPLAY ' ERROR IN DELETING RECORD FROM MASTER FILE'
+                DISPLAY ' FILE STATUS IS  ' WS-MAST-ATHLETE-STATUS
+                DISPLAY '*********************************************'
+             END-IF
+
+             ADD 1 TO TOT-VALID-DELETES.
+
+      ***********************************************
+      *  400-WRITE-LINE
+      *  - WRITES A LINE TO THE REPORT
+      ***********************************************
+
+         400-WRITE-LINE.
+      *      DISPLAY DL1-VALID-CODE
+             IF WS-LINE-CNT > 42
+                PERFORM 500-HEADINGS
+             END-IF
+
+             IF VALID-REC
+                MOVE MAST-ATHLETE-NO TO DL1-ATHLETE-KEY
+                MOVE MAST-ATHLETE-NAME TO DL1-ATHLETE-NAME
+                PERFORM 410-SEARCH-COACH
+                MOVE MAST-NUM-OF-EVENTS TO DL1-NUM-OF-EVENTS
+
+                PERFORM VARYING WS-COUNTER FROM 1 BY 1
+                   UNTIL WS-COUNTER > MAST-NUM-OF-EVENTS
+                     IF WS-COUNTER > 5
+                        MOVE MAST-EVENT-CODE (WS-COUNTER) TO
+                             DL2-EVENT (WS-COUNTER - 5)
+                        MOVE MAST-EVENT-TIME (WS-COUNTER) TO
+                             DL2-TIME (WS-COUNTER - 5)
+                     ELSE
+                        MOVE MAST-EVENT-CODE (WS-COUNTER) TO
+                             DL1-EVENT (WS-COUNTER)
+                        MOVE MAST-EVENT-TIME (WS-COUNTER) TO
+                             DL1-TIME (WS-COUNTER)
+                    END-IF
+                END-PERFORM
+
+                   MOVE DETAIL-LINE-1 TO PRINT-REC
+                   WRITE PRINT-REC
+                      AFTER WS-LINES
+                   ADD WS-LINES TO WS-LINE-CNT
+                   MOVE 2 TO WS-LINES
+
+                IF MAST-NUM-OF-EVENTS > 5
+                   MOVE 1 TO WS-LINES
+                   MOVE DETAIL-LINE-2 TO PRINT-REC
+                   WRITE PRINT-REC
+                      AFTER WS-LINES
+                   ADD WS-LINES TO WS-LINE-CNT
+                   MOVE 2 TO WS-LINES
+                END-IF
+             ELSE
+                IF INVALID-REC
+                   DISPLAY DL1-VALID-CODE
+                   MOVE MAST-ATHLETE-NO TO DL1-ATHLETE-KEY
+                   MOVE SPACES TO DL1-ATHLETE-NAME
+                                  DL1-COACH-FIRST-NAME
+                                  DL1-COACH-LAST-NAME
+                   MOVE 0 TO DL1-NUM-OF-EVENTS
+                   PERFORM VARYING WS-COUNTER FROM 1 BY 1
+                       UNTIL WS-COUNTER > 5
+                           MOVE SPACES TO DL1-EVENT (WS-COUNTER)
+                           MOVE 0 TO DL1-TIME (WS-COUNTER)
+                   END-PERFORM
+                   MOVE DETAIL-LINE-1 TO PRINT-REC
+                   WRITE PRINT-REC
+                      AFTER WS-LINES
+                   ADD WS-LINES TO WS-LINE-CNT
+
+                   IF ADD-RECORD
+                      ADD 1 TO TOT-INVALID-ADDS
+                   ELSE
+                      IF CHANGE-RECORD
+                         ADD 1 TO TOT-INVALID-CHANGES
+                      ELSE
+                         ADD 1 TO TOT-INVALID-DELETES
+                      END-IF
+                   END-IF
+                END-IF
+             END-IF
+             DISPLAY DL1-VALID-CODE
+             MOVE 2 TO WS-LINES
+             MOVE SPACES TO DETAIL-LINE-1
+                            DETAIL-LINE-2.
+
+      ***********************************************
+      * 410-SEARCH-COACH
+      * -  SEARCHES THE COACH FILE FOR A COACH NUMBER.
+      *    IF THE NUMBER IS FOUND, THE CORRESPONDING
+      *    COACH NAME IS WRITTEN TO THE REPORT.
+      ***********************************************
+
+        410-SEARCH-COACH.
+            MOVE MAST-COACH-NUM TO MAST-COACH-NO
+
+            READ COACH-MASTER-IN
+            IF WS-MAST-COACH-STATUS = '00'
+               MOVE MAST-COACH-F-NAME TO DL1-COACH-FIRST-NAME
+               MOVE MAST-COACH-L-NAME TO DL1-COACH-LAST-NAME
+
+            ELSE
+               IF WS-MAST-COACH-STATUS = '23'
+                  MOVE 'COACH NAME' TO DL1-COACH-FIRST-NAME
+                  MOVE 'NOT FOUND' TO DL1-COACH-LAST-NAME
+               ELSE
+                  DISPLAY '*******************************'
+                  DISPLAY ' 410-SEARCH-COACH'
+                  DISPLAY ' ERROR IN READING THE COACH FILE'
+                  DISPLAY ' FILE STATUS IS  ', WS-MAST-COACH-STATUS
+                  DISPLAY '*******************************'
+               END-IF
+            END-IF.
+      ***********************************************
+      * 500-HEADINGS
+      *  - WRITES THE HEADINGS FOR THE REPORT
+      ***********************************************
+        500-HEADINGS.
+            MOVE TSO-ID TO PRINT-REC
+            WRITE PRINT-REC
+               AFTER PAGE
+
+            ADD 1 TO WS-PAGE-CNT
+            MOVE WS-PAGE-CNT TO HL1-PAGE
+            MOVE HEADING-LINE-1 TO PRINT-REC
+            WRITE PRINT-REC
+               AFTER 2
+
+            MOVE HEADING-LINE-2 TO PRINT-REC
+            WRITE PRINT-REC
+
+            MOVE HEADING-LINE-3 TO PRINT-REC
+            WRITE PRINT-REC
+               AFTER 2
+
+            MOVE HEADING-LINE-4 TO PRINT-REC
+            WRITE PRINT-REC
+
+            MOVE HEADING-UNDER-LINE TO PRINT-REC
+            WRITE PRINT-REC
+               AFTER 0
+
+            MOVE 0 TO WS-LINE-CNT
+            MOVE 2 TO WS-LINES.
+
+/*
+

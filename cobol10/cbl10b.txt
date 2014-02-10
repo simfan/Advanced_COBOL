@@ -1,0 +1,384 @@
+       IDENTIFICATION DIVISION.
+
+       PROGRAM-ID. CBL10B.
+       AUTHOR.  CHRIS GLOCK.
+       DATE-WRITTEN. 12/14/06.
+       DATE-COMPILED.
+      ******************************************************************
+      * PURPOSE:  THIS PROGRAM WILL READ RECORDS FROM A MEMBER THAT
+      * CONTAINS A LIST OF PEOPLE IN YOUR COBOL CLASS AND WILL
+      * WRITE EACH RECORD TO A NEW DATASET.
+      ******************************************************************
+
+       ENVIRONMENT DIVISION.
+
+       INPUT-OUTPUT SECTION.
+
+       FILE-CONTROL.
+
+           SELECT EMP-REPORT
+               ASSIGN TO SUMMARY.
+
+       DATA DIVISION.
+
+
+       FILE SECTION.
+
+       FD  EMP-REPORT
+           RECORD CONTAINS 132 CHARACTERS.
+
+       01  PRINT-REC         PIC X(132).
+
+       WORKING-STORAGE SECTION.
+      ******************************************************************
+      * THIS IS WHERE YOU DEFINE VARIABLES NEEDED THAT ARE NOT
+      * PART OF THE ANY FILE DEFINITION. (REMOVE)
+      ******************************************************************
+           EXEC SQL
+              INCLUDE EMP
+           END-EXEC
+
+           EXEC SQL
+               INCLUDE DEPT
+           END-EXEC
+
+           EXEC SQL
+              INCLUDE SQLCA
+           END-EXEC
+
+           EXEC SQL
+              DECLARE EMPCURS CURSOR FOR
+                SELECT  A.LASTNAME, A.WORKDEPT, B.DEPTNAME
+                  FROM SCM.EMP A
+                  INNER JOIN SCM.DEPT B
+                ON A.WORKDEPT = B.DEPTNO
+                ORDER BY B.DEPTNAME, A.LASTNAME
+           END-EXEC
+
+       01  WORK-FIELDS.
+           05 MORE-RECORDS  PIC XXX VALUE 'YES'.
+              88 NO-MORE-RECORDS    VALUE 'NO '.
+
+           05 WS-FIRST-LINE           PIC XXX VALUE 'YES'.
+           05 WS-PAGE-COUNT           PIC 99.
+           05 WS-LINE-COUNT           PIC 99 VALUE 60.
+           05 WS-LINES                PIC 9.
+           05 WS-DEPT-NAME-MGR        PIC X(56).
+           05 WS-EMP-COUNT            PIC S9(9) COMP.
+           05 WS-EDITED-EMP-COUNT     PIC Z9.
+           05 WS-TOTAL-EMP-COUNT      PIC S9(9) COMP.
+           05 WS-EDITED-TOTAL-COUNT   PIC Z,ZZ9.
+           05 WS-DEPT                 PIC X(3).
+           05 WS-DEPT-HOLD            PIC X(3).
+           05 WS-DEPT-NAME            PIC X(36).
+           05 WS-SUB-LINE             PIC X(78).
+           05 WS-DISPLAY-SQLCODE      PIC -999.
+           05 WS-MGR-NAME             PIC X(15).
+
+       01  CURRENT-DATE-AND-TIME.
+           05 CD-YEAR                 PIC 9(4).
+           05 CD-MONTH                PIC 99.
+           05 CD-DAY                  PIC 99.
+
+       01  TSO-ID                     PIC X(7) VALUE 'XSCS119'.
+
+       01  HEADING-LINE-1.
+           05 HL1-MONTH               PIC 99.
+           05                         PIC X VALUE '/'.
+           05 HL1-DAY                 PIC 99.
+           05                         PIC X VALUE '/'.
+           05 HL1-YEAR                PIC 9(4).
+           05                         PIC X(58) VALUE SPACES.
+           05                         PIC X(5) VALUE 'PAGE '.
+           05 HL1-PAGE                PIC Z9.
+
+       01  HEADING-LINE-2.
+           05                         PIC X(24) VALUE SPACES.
+           05                  PIC X(20) VALUE 'WILD KINGDOM OUTDOOR'.
+           05                  PIC X(11) VALUE ' OUTFITTERS'.
+
+       01  HEADING-LINE-3.
+           05                         PIC X(25) VALUE SPACES.
+           05                  PIC X(22) VALUE 'EMPLOYEE BY DEPARTMENT'.
+           05                  PIC X(7) VALUE ' REPORT'.
+
+       01  HEADING-LINE-4.
+           05                         PIC X(68) VALUE SPACES.
+           05                         PIC X(8) VALUE 'EMPLOYEE'.
+
+       01  HEADING-LINE-5.
+           05                         PIC X(5) VALUE SPACES.
+           05                 PIC X(20) VALUE 'DEPARTMENT / MANAGER'.
+           05                         PIC X(43) VALUE SPACES.
+           05                         PIC X(9) VALUE 'LAST NAME'.
+
+       01  DETAIL-LINE.
+           05                         PIC X(5) VALUE SPACES.
+           05 DL-DEPT-NAME-MGR        PIC X(56).
+           05                         PIC X(4) VALUE SPACES.
+           05 DL-EMP-LAST-NAME        PIC X(15).
+
+       01  DEPT-TOTAL-LINE           PIC X(78).
+
+       01  GRAND-TOTAL-LINE.
+           05                       PIC X(11) VALUE ' * * * *   '.
+           05                       PIC X(17) VALUE 'TOTAL EMPLOYEES: '.
+           05 GT-EMP-COUNT          PIC Z,ZZ9.
+
+       PROCEDURE DIVISION.
+      *******************************************
+      *  MAIN PROCESSING MODULE.
+      *   - HOUSEKEEPING PERFORMED
+      *   - PRETEST LOOP IS PERFORMED UNTIL ALL RECORDS ARE READ
+      *     - FOR EACH RECORD READ, 110 PROCESS IS PERFORMED
+      *   - END OF JOB PERFORMED
+      *******************************************
+
+       000-MAIN-MODULE.
+
+           PERFORM 100-HOUSEKEEPING.
+
+           PERFORM UNTIL NO-MORE-RECORDS
+             MOVE SPACES TO DEPTNAME-TEXT
+                            LASTNAME-TEXT
+
+           EXEC SQL
+             FETCH EMPCURS
+             INTO :LASTNAME, :WORKDEPT, :DEPTNAME
+           END-EXEC
+              IF SQLCODE = 0
+                 PERFORM 110-PROCESS
+              ELSE
+                 IF SQLCODE = 100
+                    MOVE 'NO ' TO MORE-RECORDS
+                 ELSE
+                    MOVE SQLCODE TO WS-DISPLAY-SQLCODE
+                    DISPLAY '*****************************'
+                    DISPLAY ' 000-MAIN-MODULE'
+                    DISPLAY ' ERROR IN READING EMPCURSOR'
+                    DISPLAY ' SQL CODE IS ' WS-DISPLAY-SQLCODE
+                    DISPLAY '*****************************'
+                 END-IF
+              END-IF
+           END-PERFORM.
+
+           PERFORM 120-END-OF-JOB.
+
+           STOP RUN.
+
+      *******************************************
+      *  HOUSEKEEPING MODULE.
+      *  - FILES OPENED FOR PROCESSING
+      *******************************************
+
+       100-HOUSEKEEPING.
+
+           EXEC SQL
+              OPEN EMPCURS
+           END-EXEC
+           IF SQLCODE NOT = 0
+              MOVE SQLCODE TO WS-DISPLAY-SQLCODE
+              DISPLAY '*****************************'
+              DISPLAY ' 100-HOUSEKEEPING'
+              DISPLAY ' ERROR IN OPENING EMPCURSOR'
+              DISPLAY ' SQL CODE IS ' WS-DISPLAY-SQLCODE
+              DISPLAY '*****************************'
+           END-IF
+
+           OPEN OUTPUT EMP-REPORT.
+
+           MOVE FUNCTION CURRENT-DATE TO CURRENT-DATE-AND-TIME
+           MOVE CD-YEAR TO HL1-YEAR
+           MOVE CD-MONTH TO HL1-MONTH
+           MOVE CD-DAY TO HL1-DAY.
+
+      *******************************************
+      *  DETAIL PROCESS MODULE.
+      *  - AN EXPLAINATION OF THE PROCESSING FOR EACH
+      *    RECORD BELONGS HERE
+      *******************************************
+
+       110-PROCESS.
+
+           IF WS-LINE-COUNT > 40
+              PERFORM 210-HEADINGS
+           END-IF
+
+           IF WS-FIRST-LINE = 'YES'
+              MOVE 'NO ' TO WS-FIRST-LINE
+              MOVE WORKDEPT TO WS-DEPT
+                               WS-DEPT-HOLD
+              MOVE SPACES TO WS-DEPT-NAME-MGR
+           EXEC SQL
+            SELECT LASTNAME
+               INTO :WS-MGR-NAME
+             FROM SCM.EMP
+            WHERE WORKDEPT = :WORKDEPT AND JOB = 'MANAGER' OR JOB='PRES'
+           END-EXEC
+           IF SQLCODE NOT = 0
+              MOVE SQLCODE TO WS-DISPLAY-SQLCODE
+              DISPLAY '*********************************************'
+              DISPLAY ' 110-PROCESS'
+              DISPLAY ' ERROR IN READING EMPLOYEE FILE FOR MANAGER'
+              DISPLAY ' SQL CODE IS ' WS-DISPLAY-SQLCODE
+              DISPLAY '*********************************************'
+           END-IF
+              STRING DEPTNAME-TEXT DELIMITED BY '  '
+              ' ( ' DELIMITED BY SIZE
+              WS-MGR-NAME DELIMITED '  '
+              ' )' DELIMITED BY SIZE
+              INTO WS-DEPT-NAME-MGR
+
+           ELSE
+              MOVE SPACES TO WS-DEPT-NAME-MGR
+           END-IF
+
+           IF WORKDEPT NOT = WS-DEPT-HOLD
+              PERFORM 200-DEPT-BREAK
+           END-IF
+
+           MOVE WS-DEPT-NAME-MGR TO DL-DEPT-NAME-MGR
+           MOVE LASTNAME TO DL-EMP-LAST-NAME
+           MOVE DETAIL-LINE TO PRINT-REC
+           WRITE PRINT-REC
+             AFTER WS-LINES
+           ADD WS-LINES TO WS-LINE-COUNT.
+      *******************************************
+      *  END OF JOB MODULE.
+      *  - FILES CLOSED
+      *******************************************
+
+       120-END-OF-JOB.
+           PERFORM 200-DEPT-BREAK
+           EXEC SQL
+              SELECT COUNT(*)
+              INTO :WS-TOTAL-EMP-COUNT
+              FROM SCM.EMP
+           END-EXEC
+           IF SQLCODE NOT = 0
+              MOVE SQLCODE TO WS-DISPLAY-SQLCODE
+              DISPLAY '*****************************'
+              DISPLAY ' 120-END-OF-JOB'
+              DISPLAY ' ERROR IN READING EMPLOYEE FILE'
+              DISPLAY ' SQL CODE IS ' WS-DISPLAY-SQLCODE
+              DISPLAY '*****************************'
+           END-IF
+           MOVE WS-TOTAL-EMP-COUNT TO WS-EDITED-TOTAL-COUNT
+           MOVE WS-EDITED-TOTAL-COUNT TO GT-EMP-COUNT
+           MOVE GRAND-TOTAL-LINE TO PRINT-REC
+           WRITE PRINT-REC
+             AFTER 2
+           EXEC SQL
+              CLOSE EMPCURS
+           END-EXEC.
+           IF SQLCODE NOT = 0
+              MOVE SQLCODE TO WS-DISPLAY-SQLCODE
+              DISPLAY '*****************************'
+              DISPLAY ' 120-END-OF-JOB'
+              DISPLAY ' ERROR IN CLOSING EMPCURSOR'
+              DISPLAY ' SQL CODE IS ' WS-DISPLAY-SQLCODE
+              DISPLAY '*****************************'
+           END-IF.
+
+       200-DEPT-BREAK.
+           MOVE 4 TO WS-LINES
+           EXEC SQL
+              SELECT COUNT(*)
+                INTO :WS-EMP-COUNT
+                FROM SCM.EMP
+              WHERE WORKDEPT = :WS-DEPT-HOLD
+              GROUP BY WORKDEPT
+              ORDER BY WORKDEPT
+           END-EXEC
+           IF SQLCODE NOT = 0
+              MOVE SQLCODE TO WS-DISPLAY-SQLCODE
+              DISPLAY '**********************************************'
+              DISPLAY ' 200-DEPT-BREAK'
+              DISPLAY ' ERROR IN READING EMPLOYEE FILE FOR EMP COUNT'
+              DISPLAY ' SQL CODE IS ' WS-DISPLAY-SQLCODE
+              DISPLAY '**********************************************'
+           END-IF
+           MOVE SPACES TO WS-DEPT-NAME
+           EXEC SQL
+              SELECT DEPTNAME
+                INTO :WS-DEPT-NAME
+                FROM SCM.DEPT
+              WHERE DEPTNO = :WS-DEPT
+           END-EXEC
+           IF SQLCODE NOT = 0
+              MOVE SQLCODE TO WS-DISPLAY-SQLCODE
+              DISPLAY '**********************************************'
+              DISPLAY ' 200-DEPT-BREAK'
+              DISPLAY ' ERROR IN READING DEPARTMENT FILE'
+              DISPLAY ' SQL CODE IS ' WS-DISPLAY-SQLCODE
+              DISPLAY '**********************************************'
+           END-IF
+           MOVE WS-EMP-COUNT TO WS-EDITED-EMP-COUNT
+           STRING '     * * * ' DELIMITED BY SIZE
+           WS-EDITED-EMP-COUNT DELIMITED BY '  '
+           ' EMPLOYEES IN THE ' DELIMITED BY SIZE
+           WS-DEPT-NAME DELIMITED BY '  '
+           ' DEPARTMENT' DELIMITED BY SIZE
+           INTO WS-SUB-LINE
+
+           MOVE WS-SUB-LINE TO DEPT-TOTAL-LINE
+           MOVE DEPT-TOTAL-LINE TO PRINT-REC
+           WRITE PRINT-REC
+             AFTER WS-LINES
+
+           EXEC SQL
+             SELECT LASTNAME
+               INTO :WS-MGR-NAME
+             FROM SCM.EMP
+            WHERE WORKDEPT = :WORKDEPT AND JOB = 'MANAGER' OR JOB='PRES'
+           END-EXEC
+           IF SQLCODE NOT = 0
+              MOVE SQLCODE TO WS-DISPLAY-SQLCODE
+              DISPLAY '*********************************************'
+              DISPLAY ' 200-DEPT-BREAK'
+              DISPLAY ' ERROR IN READING EMPLOYEE FILE FOR MANAGER'
+              DISPLAY ' SQL CODE IS ' WS-DISPLAY-SQLCODE
+              DISPLAY '*********************************************'
+           END-IF
+           MOVE SPACES TO WS-DEPT-NAME-MGR
+           STRING DEPTNAME-TEXT DELIMITED BY '  '
+           ' ( ' DELIMITED BY SIZE
+           WS-MGR-NAME DELIMITED '  '
+           ' )' DELIMITED BY SIZE
+           INTO WS-DEPT-NAME-MGR
+
+           ADD WS-LINES TO WS-LINE-COUNT
+           MOVE 2 TO WS-LINES
+           MOVE WORKDEPT TO WS-DEPT-HOLD
+                            WS-DEPT.
+
+       210-HEADINGS.
+           MOVE TSO-ID TO PRINT-REC
+           WRITE PRINT-REC
+             AFTER PAGE
+
+           ADD 1 TO WS-PAGE-COUNT
+
+           MOVE WS-PAGE-COUNT TO HL1-PAGE
+           MOVE HEADING-LINE-1 TO PRINT-REC
+           WRITE PRINT-REC
+             AFTER 2
+
+           MOVE HEADING-LINE-2 TO PRINT-REC
+           WRITE PRINT-REC
+
+           MOVE HEADING-LINE-3 TO PRINT-REC
+           WRITE PRINT-REC
+             AFTER 2
+
+           MOVE HEADING-LINE-4 TO PRINT-REC
+           WRITE PRINT-REC
+             AFTER 2
+
+           MOVE HEADING-LINE-5 TO PRINT-REC
+           WRITE PRINT-REC
+
+           MOVE 'YES' TO WS-FIRST-LINE
+           MOVE 2 TO WS-LINES
+           MOVE 0 TO WS-LINE-COUNT
+           MOVE WS-DEPT-HOLD TO WS-DEPT.
